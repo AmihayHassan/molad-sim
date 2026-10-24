@@ -25,7 +25,8 @@
   .lang button{padding:0 6px;line-height:24px;font-size:11px}
   .phead{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .phead h1,.phead h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .collapse{padding:0 8px;line-height:24px}
+  .collapse,.winx,.winc{padding:0 8px;line-height:24px}
+  .wbtns{display:flex;gap:4px}.winc svg{display:block;width:12px;height:24px}
   .pbody{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--dur) var(--ease),opacity var(--dur) var(--ease)}
   .pin{min-height:0;overflow:hidden}
   .panel.collapsed .pbody{grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows var(--dur) var(--ease-in),opacity .12s var(--ease-in),visibility 0s var(--dur)} /* visibility keeps collapsed controls out of the tab order */
@@ -59,7 +60,8 @@
   .ico svg{width:14px;height:14px;fill:currentColor}
   #stepUnit{width:auto;height:34px}
   .tb-tools button{height:34px;white-space:nowrap}
-  #speedBtn{min-width:52px;font-variant-numeric:tabular-nums}
+  #speedBtn{min-width:52px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;padding:2px 9px;white-space:nowrap}
+  #speedBtn small{font-size:10px;color:var(--muted)}
   #clock{grid-area:clock;justify-self:center;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;line-height:1.2;padding:3px 12px;background:none;border-color:transparent}
   #clock:hover{background:rgba(255,255,255,.08)}
   #clock .date{font-size:16px;font-weight:600;white-space:nowrap}
@@ -122,7 +124,11 @@
   canvas.chart{width:100%;height:96px;display:block;margin-top:8px}
   .moon{display:flex;gap:12px;align-items:center;margin-top:4px}
   .moon>div{flex:1;min-width:0}
-  #phase{width:118px;height:118px;flex:none}
+  #phase{width:118px;height:118px;flex:none;cursor:zoom-in;border-radius:50%}
+  #phaseBig{position:fixed;inset:auto;margin:0;z-index:5;padding:0 12px 12px;width:min(380px,92vw);height:auto;min-width:170px;max-width:min(96vw,calc(92vh - 40px));resize:horizontal;overflow:hidden;color:var(--text);background:var(--panel);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);transform-origin:0 0}
+  #phaseBig[open]{display:flex;flex-direction:column}
+  #phaseBig .phead{cursor:move;user-select:none;touch-action:none;padding:8px 0 6px}
+  #phaseBig #phase{display:block;width:100%;height:auto;aspect-ratio:1;cursor:default} /* only the width resizes; the square Moon sets the height */
   #eclipse{margin-top:8px;font-size:12px;color:#ffb38a;min-height:1em}
   .hint{margin-top:8px;font-size:11px;color:var(--muted)}
   #labels{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:1}
@@ -152,6 +158,7 @@
 <body>
 <canvas id="scene"></canvas>
 <div id="card" role="tooltip" hidden></div>
+<dialog id="phaseBig" data-i18n-aria="phaseAria"><div class="phead"><h2 data-i18n="moonPhase">Moon phase</h2><span class="wbtns"><button class="winc" data-i18n-aria="center" data-i18n-title="center" aria-label="Centre the window"><svg viewBox="0 0 12 24" aria-hidden="true"><circle cx="6" cy="12" r="2.2" fill="currentColor"/><path d="M6 5v3.5M6 15.5V19M0 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></button><button class="winx" data-i18n-aria="close" aria-label="Close">×</button></span></div><div class="pbody2"></div></dialog>
 <div id="labels"></div>
 <div id="loading" data-i18n="loading">Building the solar system…</div>
 
@@ -249,7 +256,7 @@
     </section>
     <section>
       <h3 data-i18n="moonPhase">Moon phase</h3>
-      <div class="moon"><canvas id="phase" data-i18n-aria="phaseAria" aria-label="Moon phase preview"></canvas>
+      <div class="moon"><canvas id="phase" role="button" tabindex="0" data-i18n-aria="phaseAria" aria-label="Moon phase preview" data-i18n-title="phaseZoom"></canvas>
         <div>
           <div class="big" id="illum">—</div>
           <div id="phaseName"></div>
@@ -301,7 +308,7 @@ const I18N = {
     hm: '{h} h {m} m', polarDay: '24 h — polar day', polarNight: '0 h — polar night',
     chartAria: 'Day length through the year', chartH: '{v}h', months: 'J,F,M,A,M,J,J,A,S,O,N,D', dayLength: 'Day length',
     hintDaylight: 'Sunrise/sunset include refraction: clock time at the place, or local mean solar time (LMT) for a custom latitude. On Earth, the ring at your latitude is gold where it is day and blue where it is night.',
-    lmt: 'LMT', moonPhase: 'Moon phase', phaseAria: 'Moon phase preview', age: 'Age', distance: 'Distance', lit: '{v}% lit', km: '{v} km', au: '{v} AU',
+    lmt: 'LMT', moonPhase: 'Moon phase', phaseAria: 'Moon phase preview', phaseZoom: 'Click to open in a window', close: 'Close', center: 'Centre the window', age: 'Age', distance: 'Distance', lit: '{v}% lit', km: '{v} km', au: '{v} AU',
     lightS: '{v} light-s', lightMin: '{v} light-min', lightH: '{v} light-h',
     newMoon: 'New Moon', waxCres: 'Waxing Crescent', firstQ: 'First Quarter', waxGib: 'Waxing Gibbous', fullMoon: 'Full Moon',
     wanGib: 'Waning Gibbous', lastQ: 'Last Quarter', wanCres: 'Waning Crescent',
@@ -329,7 +336,7 @@ const I18N = {
     hm: '{h} שע׳ {m} דק׳', polarDay: '24 שע׳ — יום קוטבי', polarNight: '0 שע׳ — לילה קוטבי',
     chartAria: 'אורך היום לאורך השנה', chartH: '{v}', months: '1,2,3,4,5,6,7,8,9,10,11,12', dayLength: 'אורך היום',
     hintDaylight: 'הזריחה והשקיעה כוללות שבירת אור: שעון מקומי במקום הנבחר, או זמן שמש ממוצע מקומי (LMT) בקו רוחב מותאם. על כדור הארץ, הטבעת בקו הרוחב שלך זהובה בצד היום וכחולה בצד הלילה.',
-    lmt: 'זמן שמש', moonPhase: 'מופע הירח', phaseAria: 'תצוגת מופע הירח', age: 'גיל', distance: 'מרחק', lit: '{v}% מואר', km: '{v} ק״מ', au: '{v} יח״א',
+    lmt: 'זמן שמש', moonPhase: 'מופע הירח', phaseAria: 'תצוגת מופע הירח', phaseZoom: 'לחצו לפתיחה בחלון', close: 'סגירה', center: 'מרכוז החלון', age: 'גיל', distance: 'מרחק', lit: '{v}% מואר', km: '{v} ק״מ', au: '{v} יח״א',
     lightS: '{v} שניות\u2011אור', lightMin: '{v} דקות\u2011אור', lightH: '{v} שעות\u2011אור',
     newMoon: 'ירח חדש', waxCres: 'סהר מתמלא', firstQ: 'רבע ראשון', waxGib: 'ירח מתמלא (גיבוס)', fullMoon: 'ירח מלא',
     wanGib: 'ירח מתמעט (גיבוס)', lastQ: 'רבע אחרון', wanCres: 'סהר מתמעט',
@@ -2342,6 +2349,63 @@ window.simScale = { set: setTrueScale, TS, KMU, renderer, scene }; // console te
 // CSS sizes of the HUD canvases, cached: reading clientWidth every frame, right after DOM writes, forces a layout.
 const hudBox = { chart: [0, 0], phase: 0 }, measureHud = () => { hudBox.chart = [$('chart').clientWidth, $('chart').clientHeight]; hudBox.phase = $('phase').clientWidth; };
 { const ro = new ResizeObserver(measureHud); ro.observe($('chart')); ro.observe($('phase')); measureHud(); }
+// Click the phase preview to open it in a floating window: drag it by its title, resize it from the corner, close with × or Esc.
+// The canvas moves into the window (a placeholder keeps the panel layout); drawPhase follows its new size via the ResizeObserver.
+{
+  const cv = $('phase'), win = $('phaseBig'), body = win.querySelector('.pbody2'), head = win.querySelector('.phead'), ph = document.createElement('div');
+  ph.style.cssText = 'width:118px;height:118px;flex:none';
+  // Layout values (style + offset size), not getBoundingClientRect: during the open/close morph the window is transformed onto
+  // the panel's Moon, and reading that would pin the window there.
+  const pos = () => [parseFloat(win.style.left) || 0, parseFloat(win.style.top) || 0];
+  let placed = false;
+  const centre = () => { win.style.left = (innerWidth - win.offsetWidth) / 2 + 'px'; win.style.top = (innerHeight - win.offsetHeight) / 2 + 'px'; };
+  const keepOnScreen = () => { const [x, y] = pos();
+    win.style.left = clamp(x, 0, max(0, innerWidth - win.offsetWidth)) + 'px'; win.style.top = clamp(y, 0, max(0, innerHeight - win.offsetHeight)) + 'px'; };
+  const open = () => {
+    if (win.open) return;
+    cv.replaceWith(ph); body.append(cv); win.show(); measureHud(); cv.title = '';
+    if (!placed) centre(); // centred until the user drags it; then it reopens where they left it
+    keepOnScreen();
+    fly(ph.getBoundingClientRect(), false);
+  };
+  // Open/close morph: the window is scaled so its Moon sits exactly on the panel's small Moon, then animates to full size
+  // (or back), while its frame fades in (or out). Skipped for reduced motion or when the panel spot is hidden.
+  let closing = false, refocus = false; // refocus: the keyboard was in the window when closing began
+  const fly = (S, back) => {
+    const B = cv.getBoundingClientRect(), W = win.getBoundingClientRect();
+    if (!S.width || !B.width || matchMedia('(prefers-reduced-motion: reduce)').matches) return null;
+    const k = S.width / B.width, dx = S.left - W.left - k * (B.left - W.left), dy = S.top - W.top - k * (B.top - W.top), cs = getComputedStyle(win);
+    const small = { transform: `translate(${dx}px,${dy}px) scale(${k})`, backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', boxShadow: '0 0 0 rgba(0,0,0,0)', backdropFilter: 'blur(0px)' };
+    const big = { transform: 'none', backgroundColor: cs.backgroundColor, borderColor: cs.borderTopColor, boxShadow: cs.boxShadow, backdropFilter: cs.backdropFilter };
+    const opt = { duration: 320, easing: back ? 'cubic-bezier(.4,0,.6,1)' : 'cubic-bezier(.4,0,.2,1)', fill: back ? 'forwards' : 'none' };
+    head.animate(back ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], opt);
+    return win.animate(back ? [big, small] : [small, big], opt);
+  };
+  const close = () => {
+    if (!win.open || closing) return;
+    refocus = win.contains(document.activeElement);
+    const a = fly(ph.getBoundingClientRect(), true);
+    if (!a) return win.close();
+    closing = true;
+    a.onfinish = () => { closing = false; win.close(); win.getAnimations({ subtree: true }).forEach(x => x.cancel()); };
+  };
+  win.addEventListener('close', () => { ph.replaceWith(cv); measureHud(); cv.title = t('phaseZoom'); if (refocus) cv.focus({ preventScroll: true }); refocus = false; });
+  win.querySelector('.winx').onclick = close;
+  win.querySelector('.winc').onclick = () => { // glide back to the centre
+    const [x0, y0] = pos(); centre(); placed = false; const [x1, y1] = pos();
+    if ((x0 !== x1 || y0 !== y1) && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+      win.animate([{ transform: `translate(${x0 - x1}px,${y0 - y1}px)` }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.4,0,.2,1)' });
+  };
+  addEventListener('keydown', e => { if (e.key === 'Escape' && win.open) close(); });
+  addEventListener('resize', () => { if (win.open) keepOnScreen(); });
+  new ResizeObserver(() => { if (win.open) keepOnScreen(); }).observe(win); // growing from the corner must not push it off screen
+  cv.addEventListener('click', open);
+  cv.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !win.open) { e.preventDefault(); e.stopPropagation(); open(); } });
+  let drag = null;
+  head.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; const [x, y] = pos(); drag = [e.clientX - x, e.clientY - y]; head.setPointerCapture(e.pointerId); });
+  head.addEventListener('pointermove', e => { if (!drag) return; win.style.left = e.clientX - drag[0] + 'px'; win.style.top = e.clientY - drag[1] + 'px'; keepOnScreen(); placed = true; });
+  head.addEventListener('pointerup', () => { drag = null; });
+}
 let chartCurve = [], chartKey = '', chartDrawn = '', declYear = null, declCurve = [];
 function drawChart(year, jan1, daysInYear, doy) {
   const key = `${year}|${state.latitude}`;
@@ -2369,10 +2433,11 @@ function drawChart(year, jan1, daysInYear, doy) {
 }
 
 let moonAlbedo = null, phaseKey = '';
+const ALB_W = 2048;
 function setMoonAlbedo(src) {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
-  const g = c.getContext('2d'); g.drawImage(src, 0, 0, 512, 256);
-  moonAlbedo = g.getImageData(0, 0, 512, 256).data; phaseKey = '';
+  const c = document.createElement('canvas'); c.width = ALB_W; c.height = ALB_W / 2; // 2048: sharp in the enlarged view
+  const g = c.getContext('2d'); g.drawImage(src, 0, 0, ALB_W, ALB_W / 2);
+  moonAlbedo = g.getImageData(0, 0, ALB_W, ALB_W / 2).data; phaseKey = '';
 }
 // The parts of drawPhase that depend only on the size n: per disc pixel its destination index, x, z, albedo index and alpha.
 let phaseGeo = null;
@@ -2382,24 +2447,24 @@ function phaseGeom(n) {
   for (let py = 0; py < n; py++) for (let px = 0; px < n; px++) {
     const x = (px + 0.5) / n * 2 - 1, y = 1 - (py + 0.5) / n * 2, r2 = x * x + y * y;
     if (r2 >= 1) continue;
-    const z = sqrt(1 - r2), u = floor((0.5 + atan2(x, z) / TAU) * 511.99), v = floor((0.5 - asin(y) / PI) * 255.99);
-    o[m] = py * n + px; xs[m] = x; zs[m] = z; si[m] = (v * 512 + u) * 4; al[m++] = clamp((1 - sqrt(r2)) * n * 0.5, 0, 1) * 255;
+    const z = sqrt(1 - r2), u = floor((0.5 + atan2(x, z) / TAU) * (ALB_W - 0.01)), v = floor((0.5 - asin(y) / PI) * (ALB_W / 2 - 0.01));
+    o[m] = py * n + px; xs[m] = x; zs[m] = z; si[m] = (v * ALB_W + u) * 4; al[m++] = clamp((1 - sqrt(r2)) * n * 0.5, 0, 1) * 255;
   }
-  return { n, m, o, xs, zs, si, al };
+  return { n, m, o, xs, zs, si, al, img: new ImageData(n, n) }; // reused: disc pixels are rewritten every draw, the rest stays clear
 }
 // Renders the Moon as seen from Earth: true terminator, Lommel–Seeliger reflectance (why the full Moon looks flat), earthshine.
 function drawPhase(elong, waxing, south) {
-  const cv = $('phase'), n = round(118 * dprOf());
-  const key = `${round(elong * R2D)}|${waxing}|${south}|${n}`;
+  const cv = $('phase'), n = min(900, round(hudBox.phase * dprOf())); // follows the enlarged view; 900 caps a redraw at ~6 ms
+  const key = `${round(elong * R2D * (n > 400 ? 4 : 1))}|${waxing}|${south}|${n}`; // ¼° steps when enlarged
   if (!moonAlbedo || !hudBox.phase || key === phaseKey) return;
   phaseKey = key;
   if (cv.width !== n) cv.width = cv.height = n;
-  const g = cv.getContext('2d'), img = g.createImageData(n, n), d = img.data;
+  const g = cv.getContext('2d');
   const ang = waxing ? elong : -elong, sx = sin(ang), sz = -cos(ang); // northern view: waxing lit on the right
   const shine = 0.035 * (1 + cos(elong)) / 2;
   const surge = 1 + 0.4 * exp(-18 * (PI - elong)); // opposition surge near full Moon (phase angle ≈ 180° − elongation)
   if (phaseGeo?.n !== n) phaseGeo = phaseGeom(n);
-  const { m, o, xs, zs, si, al } = phaseGeo;
+  const { m, o, xs, zs, si, al, img } = phaseGeo, d = img.data;
   for (let i = 0; i < m; i++) {
     const z = zs[i], mu0 = xs[i] * sx + z * sz, s = si[i];
     const L = (mu0 > 0 ? 2 * mu0 / (mu0 + z) * smooth(0, 0.035, mu0) * surge : 0) + shine;
@@ -2436,7 +2501,8 @@ function setSpeed(s) {
   const rate = secs < 90 ? `${secs.toFixed(secs < 10 ? 1 : 0)} ${uS}` : secs < 5400 ? `${(secs / 60).toFixed(1)} ${uM}` : secs < 172800 ? `${(secs / 3600).toFixed(1)} ${uH}` : `${(secs / 86400).toFixed(1)} ${uD}`;
   const real = abs(s - REALTIME) / REALTIME < 0.02, mult = s < 0.01 ? `${s.toExponential(1)}×` : `${+(s < 1 ? s.toFixed(2) : s.toFixed(1))}×`;
   $('speedLabel').textContent = `${real ? TXT.realTime : iso(mult)} · ${TXT.oneSec} ${rate}`;
-  $('speedBtn').textContent = real ? TXT.real : iso(mult);
+  // The button says what the speed is: "Real time", or how much sky time passes per second ("1 s = 21.6 h").
+  const sb = $('speedBtn'); sb.replaceChildren(Object.assign(document.createElement('small'), { textContent: TXT.speedH }), real ? TXT.realTime : `${TXT.oneSec} ${rate}`);
   document.querySelectorAll('#speedChips button').forEach(b => {
     const v = b.dataset.speed === 'real' ? REALTIME : +b.dataset.speed;
     b.classList.toggle('on', abs(v - s) / v < 0.02);
