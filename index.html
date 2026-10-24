@@ -3003,7 +3003,7 @@ function animate() {
 // ---------------- Start ----------------
 applyLang();
 bindUI();
-setSpeed(1);
+setSpeed(REALTIME); // open at the real pace of the sky; a shared link can still set its own speed
 setLatitude(state.latitude);
 $('camPlanets').disabled = true;
 updateAstronomyAndUI(0);
