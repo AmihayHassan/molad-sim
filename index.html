@@ -11,18 +11,23 @@
 <style>
   :root{--panel:rgba(11,15,26,.76);--line:rgba(150,175,255,.16);--text:#e3e9f6;--muted:#8d99b3;--sun:#ffc861;--sky:#7fb2ff;--ease:cubic-bezier(.2,.7,.2,1);--ease-in:cubic-bezier(.4,0,1,1);--dur:.18s;--dur-fast:.12s}
   *{box-sizing:border-box}
+  /* One thin, rounded-looking thumb (no track) for every scroller: cards, popovers, the open dropdown list. Brightens while the scroller is hovered. */
+  :root,.panel,.pop,::picker(select){scrollbar-width:thin;scrollbar-color:rgba(150,175,255,.3) transparent}
+  .panel:hover,.pop:hover,::picker(select):hover{scrollbar-color:rgba(150,175,255,.55) transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:#000;color:var(--text);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
   #scene{position:fixed;inset:0;display:block;width:100%;height:100%}
   .panel{position:fixed;top:12px;width:292px;max-height:calc(100% - 24px);overflow-y:auto;background:var(--panel);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px;padding:10px 14px 12px;scrollbar-width:thin;z-index:2}
-  #left{left:12px}#right{right:12px}
+  #left{left:12px}#right{right:12px} /* physical sides: the cards never swap; in Hebrew only their contents mirror (dir=rtl on .panel) */
+  .panel input[type=range]{direction:ltr} /* sliders keep south→north, slow→fast in both languages */
   /* i18n: the page is always dir=ltr, so Hebrew keeps the English layout; only text runs read right-to-left (plaintext takes each run's direction from its first strong letter). Hebrew has no case, so no caps/tracking. */
   :lang(he){font-family:"Segoe UI","Noto Sans Hebrew","Arial Hebrew",Arial,sans-serif}
   :lang(he) .phead h1,:lang(he) .phead h2,:lang(he) h3,:lang(he) .label{text-transform:none;letter-spacing:0}
   :lang(he) h3{font-size:12px}:lang(he) #illum{font-size:20px} /* "100.0% מואר" must fit beside the Moon */
-  :lang(he) :where(h1,h2,h3,h4,.sub,.hint,.chk span,.lbl span,.lbl b,.kv>span,.big,#phaseName,#eclipse,#clock .date,#clock .hdate,.err,#toast,.hist button,.jrow span,.dgrid label>span,.badge,select,option){unicode-bidi:plaintext;text-align:left} /* physical alignment as in English */
+  :lang(he) :where(h1,h2,h3,h4,.sub,.hint,.chk span,.lbl span,.lbl b,.kv>span,.big,#phaseName,#eclipse,#clock .date,#clock .hdate,.err,#toast,.ldtext,.hist button,.jrow span,.dgrid label>span,.badge,select,option){unicode-bidi:plaintext}
   #eYear{unicode-bidi:plaintext} /* "−584" keeps its minus on the left */
   .lang{display:flex;gap:2px;margin-inline-start:auto}
   .lang button{padding:0 6px;line-height:24px;font-size:11px}
+  @media (max-width:760px){.lang button{line-height:32px}}
   .phead{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .phead h1,.phead h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
   .collapse,.winx,.winc{padding:0 8px;line-height:24px}
@@ -42,7 +47,23 @@
   button.on{background:rgba(255,200,97,.16);border-color:rgba(255,200,97,.55);color:#ffe2a6}
   button:focus-visible,select:focus-visible,input:focus-visible{outline-color:var(--sky)}
   select{width:100%}
-  select option,select optgroup{background:#111827;color:var(--text)}
+  select option,select optgroup{background:#1a2234;color:var(--text)} /* a shade lighter than the page, so the open list's edge is visible */
+  /* Chrome/Edge 135+: the open list becomes a styled panel (border, rounded corners, shadow) instead of a frameless native list
+     that blends into the dark page and looks cut off. Other browsers keep the native list above. */
+  @supports (appearance:base-select){
+    select,::picker(select){appearance:base-select}
+    select{display:flex;align-items:center;justify-content:space-between;gap:6px}
+    select::picker-icon{color:var(--muted);transition:rotate var(--dur-fast) var(--ease)}
+    select:open::picker-icon{rotate:180deg}
+    ::picker(select){margin-block:4px;padding:4px;max-height:min(60vh,420px);overflow-y:auto;color:var(--text);background:#111827;border:1px solid rgba(150,175,255,.28);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.6)}
+    select option,select optgroup{background:none}
+    option{padding:6px 10px;border-radius:6px;gap:8px}
+    option:hover,option:focus-visible{background:rgba(255,255,255,.08);outline:none}
+    option:checked{background:rgba(255,200,97,.14)}
+    option::checkmark{color:var(--sun)}
+    optgroup{font-size:11px;font-weight:600;color:var(--muted);padding-top:4px}
+    optgroup option{font-size:13px;font-weight:400;color:var(--text)}
+  }
   .row{display:flex;gap:6px;align-items:center}
   .row>*{flex:1}
   .chips{display:flex;gap:4px;margin:6px 0 2px}
@@ -58,15 +79,18 @@
   .tb-tr{grid-area:tr}.tb-tools{grid-area:tools}
   #timebar .ico{width:36px;height:34px;padding:0;display:grid;place-items:center}
   .ico svg{width:14px;height:14px;fill:currentColor}
-  #stepUnit{width:auto;height:34px}
+  #stepUnit{width:80px;height:34px} /* fixed widths: the longer of the EN/HE words, so a language switch shifts nothing */
   .tb-tools button{height:34px;white-space:nowrap}
-  #speedBtn{min-width:52px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;padding:2px 9px;white-space:nowrap}
+  #jumpBtn{min-width:76px}#now{min-width:53px}
+  #speedBtn{min-width:74px;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;padding:2px 9px;white-space:nowrap}
   #speedBtn small{font-size:10px;color:var(--muted)}
   #clock{grid-area:clock;justify-self:center;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;line-height:1.2;padding:3px 12px;background:none;border-color:transparent}
   #clock:hover{background:rgba(255,255,255,.08)}
   #clock .date{font-size:16px;font-weight:600;white-space:nowrap}
   #clock .hdate{font-size:12px;color:var(--gold,#e8c36a);white-space:nowrap}
-  .nohd .hd{display:none!important}
+  .hd{max-height:3em;transition:opacity var(--dur) var(--ease),max-height var(--dur) var(--ease),display var(--dur) allow-discrete}
+  .nohd .hd{display:none;opacity:0;max-height:0;transition-timing-function:var(--ease-in)}
+  @starting-style{.hd{opacity:0;max-height:0}}
   #clock .time{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
   .badge{margin-inline-start:6px;padding:0 5px;border:1px solid rgba(255,179,138,.45);border-radius:6px;color:#ffb38a;font-size:10px}
   .tb-scrub{grid-area:scrub;display:flex;gap:16px}
@@ -120,7 +144,12 @@
   .big{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.2}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin-top:6px}
   .kv>span:nth-child(odd){color:var(--muted)}
-  .kv>span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+  .kv>span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
+  [dir=rtl] .kv>span:nth-child(odd){text-align:right}[dir=rtl] .kv>span:nth-child(even){text-align:left} /* physical sides: a number-only value reads left-to-right, so "end" would put it beside its label */
+  .kv.grp{margin-top:8px;padding-top:8px;row-gap:4px;border-top:1px solid rgba(150,175,255,.1)} /* related rows grouped, a faint line between groups */
+  .dayrow{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:8px}
+  .dayrow>span{font-size:12px;color:var(--muted)}
+  #mHeb{color:var(--sun)}
   canvas.chart{width:100%;height:96px;display:block;margin-top:8px}
   .moon{display:flex;gap:12px;align-items:center;margin-top:4px}
   .moon>div{flex:1;min-width:0}
@@ -142,25 +171,27 @@
   #card h4{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
   #card h4 i{width:10px;height:10px;border-radius:50%;flex:none}
   #card .sub{color:var(--muted);font-size:11px;margin:2px 0 4px}
-  #loading{position:fixed;inset:0;display:grid;place-items:center;background:#000;color:var(--muted);font-size:14px;z-index:9;transition:opacity .7s}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;text-align:center;background:#000;color:var(--muted);font-size:14px;z-index:9;transition:opacity .7s}
+  /* loader: a Moon running through its phases (a dark disc sweeps across: waxing from the right, then waning) */
+  .ldmoon{width:56px;height:56px;margin:0 auto 18px;border-radius:50%;background:#d6d6da;position:relative;overflow:hidden;box-shadow:0 0 28px rgba(214,214,218,.18)}
+  .ldmoon::after{content:'';position:absolute;inset:-1px;border-radius:50%;background:#000;animation:ldphase 2.4s cubic-bezier(.45,0,.55,1) infinite}
+  @keyframes ldphase{0%{transform:translateX(0)}50%{transform:translateX(-104%)}50.01%{transform:translateX(104%)}100%{transform:translateX(0)}}
   @media (max-width:760px){
     .panel{left:8px!important;right:8px!important;width:auto;max-height:44%}
     #left{top:8px}#right{top:auto;bottom:8px}
   }
   @keyframes rise{from{opacity:0;transform:translateY(6px)}}
-  @keyframes xf{from{opacity:.4}}
   body.enter :is(.panel,#timebar){animation:rise .24s var(--ease) backwards;animation-delay:calc(var(--i,0) * 40ms + 120ms)}
   #timebar{--i:1}#right{--i:2}
-  .xf{animation:xf .15s var(--ease)}
   @media (prefers-reduced-motion:reduce){*,::before,::after{animation-duration:.001ms!important;animation-delay:0s!important;transition-duration:.001ms!important;transition-delay:0s!important}}
 </style>
 </head>
 <body>
 <canvas id="scene"></canvas>
 <div id="card" role="tooltip" hidden></div>
-<dialog id="phaseBig" data-i18n-aria="phaseAria"><div class="phead"><h2 data-i18n="moonPhase">Moon phase</h2><span class="wbtns"><button class="winc" data-i18n-aria="center" data-i18n-title="center" aria-label="Centre the window"><svg viewBox="0 0 12 24" aria-hidden="true"><circle cx="6" cy="12" r="2.2" fill="currentColor"/><path d="M6 5v3.5M6 15.5V19M0 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></button><button class="winx" data-i18n-aria="close" aria-label="Close">×</button></span></div><div class="pbody2"></div></dialog>
+<dialog id="phaseBig" data-i18n-aria="phaseAria"><div class="phead"><h2 data-i18n="moonPhase">Moon phase</h2><span class="wbtns"><button class="winc" data-i18n-aria="center" data-i18n-title="center" aria-label="Center the window"><svg viewBox="0 0 12 24" aria-hidden="true"><circle cx="6" cy="12" r="2.2" fill="currentColor"/><path d="M6 5v3.5M6 15.5V19M0 12h3.5M8.5 12H12" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></button><button class="winx" data-i18n-aria="close" aria-label="Close">×</button></span></div><div class="pbody2"></div></dialog>
 <div id="labels"></div>
-<div id="loading" data-i18n="loading">Building the solar system…</div>
+<div id="loading"><div><div class="ldmoon" aria-hidden="true"></div><div class="ldtext" role="status" data-i18n="loading">Building the solar system…</div></div></div>
 
 <!-- Time bar: texts come from TXT in the script (data-t → text, data-tip → tooltip) -->
 <div id="timebar" role="region">
@@ -243,11 +274,13 @@
       <select id="place" data-i18n-aria="place" aria-label="Place"></select>
       <label class="lbl" for="lat"><span data-i18n="latitude">Latitude φ</span> <b id="latLabel"></b></label>
       <input type="range" id="lat" min="-90" max="90" step="0.1">
-      <div class="big" id="dayLen">—</div>
-      <div class="kv">
-        <span data-i18n="declination">Solar declination δ</span><span id="decl"></span>
+      <div class="dayrow"><div class="big" id="dayLen">—</div><span data-i18n="dayLength">Day length</span></div>
+      <div class="kv grp">
         <span data-i18n="sunriseSunset">Sunrise / sunset</span><span id="sunrise"></span>
         <span data-i18n="withRefraction">With refraction</span><span id="dayRefr"></span>
+      </div>
+      <div class="kv grp">
+        <span data-i18n="declination">Solar declination δ</span><span id="decl"></span>
         <span data-i18n="noonAlt">Noon sun altitude</span><span id="noonAlt"></span>
         <span data-i18n="season">Season</span><span id="season"></span>
       </div>
@@ -260,10 +293,13 @@
         <div>
           <div class="big" id="illum">—</div>
           <div id="phaseName"></div>
-          <div class="kv"><span data-i18n="age">Age</span><span id="age"></span><span data-i18n="distance">Distance</span><span id="mdist"></span></div>
         </div>
       </div>
-      <div class="kv hd"><span data-i18n="hebDate">Hebrew date</span><span id="mHeb"></span></div>
+      <div class="kv grp">
+        <span class="hd" data-i18n="hebDate">Hebrew date</span><span class="hd" id="mHeb"></span>
+        <span data-i18n="age">Age</span><span id="age"></span>
+        <span data-i18n="distance">Distance</span><span id="mdist"></span>
+      </div>
       <div id="eclipse"></div>
     </section>
   </div></div>
@@ -308,7 +344,7 @@ const I18N = {
     hm: '{h} h {m} m', polarDay: '24 h — polar day', polarNight: '0 h — polar night',
     chartAria: 'Day length through the year', chartH: '{v}h', months: 'J,F,M,A,M,J,J,A,S,O,N,D', dayLength: 'Day length',
     hintDaylight: 'Sunrise/sunset include refraction: clock time at the place, or local mean solar time (LMT) for a custom latitude. On Earth, the ring at your latitude is gold where it is day and blue where it is night.',
-    lmt: 'LMT', moonPhase: 'Moon phase', phaseAria: 'Moon phase preview', phaseZoom: 'Click to open in a window', close: 'Close', center: 'Centre the window', age: 'Age', distance: 'Distance', lit: '{v}% lit', km: '{v} km', au: '{v} AU',
+    lmt: 'LMT', moonPhase: 'Moon phase', phaseAria: 'Moon phase preview', phaseZoom: 'Click to open in a window', close: 'Close', center: 'Center the window', age: 'Age', distance: 'Distance', lit: '{v}% lit', km: '{v} km', au: '{v} AU',
     lightS: '{v} light-s', lightMin: '{v} light-min', lightH: '{v} light-h',
     newMoon: 'New Moon', waxCres: 'Waxing Crescent', firstQ: 'First Quarter', waxGib: 'Waxing Gibbous', fullMoon: 'Full Moon',
     wanGib: 'Waning Gibbous', lastQ: 'Last Quarter', wanCres: 'Waning Crescent',
@@ -334,9 +370,9 @@ const I18N = {
     declination: 'נטיית השמש δ', sunriseSunset: 'זריחה / שקיעה', withRefraction: 'כולל שבירת אור', noonAlt: 'גובה השמש בצהריים',
     season: 'עונה', seasonHemi: '{s} ({h})', hemiN: 'חצי הכדור הצפוני', hemiS: 'חצי הכדור הדרומי', spring: 'אביב', summer: 'קיץ', autumn: 'סתיו', winter: 'חורף',
     hm: '{h} שע׳ {m} דק׳', polarDay: '24 שע׳ — יום קוטבי', polarNight: '0 שע׳ — לילה קוטבי',
-    chartAria: 'אורך היום לאורך השנה', chartH: '{v}', months: '1,2,3,4,5,6,7,8,9,10,11,12', dayLength: 'אורך היום',
+    chartAria: 'אורך היום לאורך השנה', chartH: '{v} שע׳', months: '1,2,3,4,5,6,7,8,9,10,11,12', dayLength: 'אורך היום',
     hintDaylight: 'הזריחה והשקיעה כוללות שבירת אור: שעון מקומי במקום הנבחר, או זמן שמש ממוצע מקומי (LMT) בקו רוחב מותאם. על כדור הארץ, הטבעת בקו הרוחב שלך זהובה בצד היום וכחולה בצד הלילה.',
-    lmt: 'זמן שמש', moonPhase: 'מופע הירח', phaseAria: 'תצוגת מופע הירח', phaseZoom: 'לחצו לפתיחה בחלון', close: 'סגירה', center: 'מרכוז החלון', age: 'גיל', distance: 'מרחק', lit: '{v}% מואר', km: '{v} ק״מ', au: '{v} יח״א',
+    lmt: 'זמן שמש ממוצע', moonPhase: 'מופע הירח', phaseAria: 'תצוגת מופע הירח', phaseZoom: 'לחצו לפתיחה בחלון', close: 'סגירה', center: 'מרכוז החלון', age: 'גיל', distance: 'מרחק', lit: '{v}% מואר', km: '{v} ק״מ', au: '{v} יח״א',
     lightS: '{v} שניות\u2011אור', lightMin: '{v} דקות\u2011אור', lightH: '{v} שעות\u2011אור',
     newMoon: 'ירח חדש', waxCres: 'סהר מתמלא', firstQ: 'רבע ראשון', waxGib: 'ירח מתמלא (גיבוס)', fullMoon: 'ירח מלא',
     wanGib: 'ירח מתמעט (גיבוס)', lastQ: 'רבע אחרון', wanCres: 'סהר מתמעט',
@@ -364,7 +400,7 @@ const HE_TABLES = {
     approx: '≈ משוער', approxTip: (a, b) => `מיקומים מחוץ לשנים ${a}–${b} משוערים`,
     year: 'שנה', month: 'חודש', day: 'יום', hour: 'שעה', minute: 'דקה', go: 'מעבר',
     calNote: 'כל שנה: הקלידו 585 לפנה״ס או \u2066−584\u2069 (שנה 0 = 1 לפנה״ס); שנים לספירה בלי תוספת. לוח יוליאני לפני 15 באוקטובר 1582 וגרגוריאני אחריו, כמו בקטלוגי הליקויים של NASA.',
-    errYear: 'שנה: הקלידו למשל 2026, 585 לפנה״ס או \u2066−584\u2069', errDay: 'היום חייב להיות מספר שלם 1–31', errHour: 'השעה חייבת להיות 0–23', errMin: 'הדקה חייבת להיות 0–59',
+    errYear: 'שנה: הקלידו למשל 2026, 585 לפנה״ס או \u2066−584\u2069', errDay: 'יום החודש חייב להיות מספר שלם 1–31', errHour: 'השעה חייבת להיות 0–23', errMin: 'הדקה חייבת להיות 0–59',
     errNoDay: (d, mon, y) => `אין ${d} ב${mon} ${y}`, errGap: 'הימים 5–14 באוקטובר 1582 דולגו ברפורמה הגרגוריאנית',
     prev: 'הקודם', next: 'הבא', history: 'היסטוריה', noSearch: 'אי אפשר לחפש אירועים רחוק כל כך מההווה',
     ev: { newMoon: 'ירח חדש', firstQ: 'רבע ראשון', fullMoon: 'ירח מלא', lastQ: 'רבע אחרון', season: 'שוויון / היפוך', solar: 'ליקוי חמה', lunar: 'ליקוי ירח' },
@@ -410,6 +446,9 @@ const EN_TABLES = {};
 // Re-renders every string in place: static HTML, generated options, labels, the time bar and (via the caches) the HUD.
 function applyLang() {
   LOCALE = LOCALES[LANG]; NUM_FMT = new Intl.NumberFormat(LOCALE);
+  // Card contents mirror; the cards stay put. Set on the contents, not the card: an RTL scroll box moves its scrollbar
+  // to the left and shifts everything. The left header (title, language toggle) stays fixed; the Observatory's mirrors.
+  document.querySelectorAll('.panel .pbody, #right .phead').forEach(p => p.dir = LANG === 'he' ? 'rtl' : 'ltr');
   document.documentElement.lang = LANG;
   document.title = t('title');
   EN_TABLES.TXT ||= { ...TXT }; Object.assign(TXT, LANG === 'he' ? HE_TABLES.TXT : EN_TABLES.TXT);
@@ -428,12 +467,31 @@ function applyLang() {
   setSpeed(state.simSpeed); setLatitude(state.latitude, true);
   if (cardKey) renderCard();
 }
+// Switching language glides: every label, value, checkbox and heading in the cards slides from where it was to its mirrored
+// place while the new words fade in (FLIP: measure, switch, measure, animate the difference). The time bar, 3D labels and
+// the Moon window don't mirror, so their text just fades in. A click mid-glide starts from wherever things are.
+const GLIDE = '.panel .phead>h1, .panel .phead>h2, .panel .collapse, .panel h3, .panel select, .panel .lbl>*, .panel .chk>*, .panel .kv>span, .panel .dayrow>*, .panel .hint, #illum, #phaseName, #phase, #eclipse';
 function setLang(l) {
-  LANG = l;
-  try { localStorage.setItem('lang', l); } catch (e) {}
-  try { const u = new URL(location.href); u.searchParams.set('lang', l); history.replaceState(history.state, '', u); } catch (e) {}
-  document.querySelectorAll('.panel,#timebar').forEach(e => { e.classList.remove('xf'); void e.offsetWidth; e.classList.add('xf'); });
-  applyLang();
+  if (l === LANG) return;
+  const swap = () => {
+    LANG = l;
+    try { localStorage.setItem('lang', LANG); } catch (e) {}
+    try { const u = new URL(location.href); u.searchParams.set('lang', LANG); history.replaceState(history.state, '', u); } catch (e) {}
+    applyLang();
+  };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return swap();
+  // Where the words are, not the box: a full-width heading or value cell keeps its box but flips its text to the other side.
+  const at = e => { if (!e.matches('input, select, canvas, button, .lang')) { const r = document.createRange(); r.selectNodeContents(e); const b = r.getBoundingClientRect(); if (b.width) return b; } return e.getBoundingClientRect(); };
+  const els = [...document.querySelectorAll(GLIDE)].filter(e => e.offsetParent), from = new Map(els.map(e => [e, at(e)]));
+  els.forEach(e => e.getAnimations().forEach(a => a.cancel()));
+  swap();
+  for (const e of els) {
+    const a = from.get(e), b = at(e);
+    if (!b.width || !a.width) continue; // hidden (collapsed card) before or after
+    const dx = a.left + a.width / 2 - b.left - b.width / 2, dy = a.top + a.height / 2 - b.top - b.height / 2;
+    e.animate([{ transform: `translate(${dx}px,${dy}px)`, opacity: 0.15 }, { transform: 'none', opacity: 1 }], { duration: 450, easing: 'cubic-bezier(.4,0,.2,1)' });
+  }
+  document.querySelectorAll('#timebar > *, #labels, #phaseBig .phead h2').forEach(e => e.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 300, easing: 'ease' }));
 }
 document.querySelectorAll('.lang button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
@@ -1028,15 +1086,26 @@ function ringCanvases() {
 // ---------------- Renderer, camera, lights ----------------
 const dprOf = () => min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2); // the one pixel-ratio source; touch screens pay more per pixel
 const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true });
-renderer.setPixelRatio(dprOf());
+// Quality tier. #q=low / #q=high wins; else weak hardware (software GL, mobile GPUs, ≤4 cores and ≤4 GB, no half-float
+// targets) starts low, and a slow frame rate steps down further at run time (autoQuality; never with q=high). Low: 1× pixels, no MSAA
+// or bloom, 3 atmosphere steps, no 4k maps, fewer tiles and belt points.
+const QFORCE = (/[#&]q=(low|high)\b/.exec(location.hash) || [])[1];
+const LOW = QFORCE ? QFORCE === 'low' : (() => {
+  const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'), ex = renderer.extensions;
+  return /swiftshader|llvmpipe|softpipe|basic render|mali|adreno|powervr|intel.*\b(hd|uhd)\b/i.test(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : '') ||
+    (navigator.hardwareConcurrency <= 4 && navigator.deviceMemory <= 4) || !(renderer.capabilities.isWebGL2 && ex.has('EXT_color_buffer_float') || ex.has('EXT_color_buffer_half_float'));
+})();
+let resScale = 1; // run-time resolution step-down
+const rdpr = () => max(0.5, min(dprOf(), LOW ? 1 : 2) * resScale); // what the WebGL canvas renders at; dprOf() stays the CSS-pixel truth for the HUD canvases
+renderer.setPixelRatio(rdpr());
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
 // Idle throttle (see animate()): input, loads and UI changes call wake() to draw at full rate for a while.
-let wakeUntil = 0;
+let wakeUntil = 0, userAt = 0; // userAt: last real input (wake() is also called by loads)
 const wake = (ms = 1500) => { wakeUntil = max(wakeUntil, performance.now() + ms); };
 for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'input', 'change', 'click', 'resize', 'hashchange', 'visibilitychange'])
-  addEventListener(ev, () => wake(), { capture: true, passive: true });
+  addEventListener(ev, () => { wake(); userAt = performance.now(); }, { capture: true, passive: true });
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.05, 20000);
 camera.position.set(0, 220, 420);
@@ -1065,13 +1134,14 @@ const composer = (() => {
   if (!THREE.UnrealBloomPass || !(caps.isWebGL2 && ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float'))) return null;
   const opt = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
   // MSAA replaces the canvas antialiasing, which render targets don't get; skipped on high-DPR screens (memory).
-  const mkRT = pr => caps.isWebGL2 && pr < 1.5 ? new THREE.WebGLMultisampleRenderTarget(1, 1, opt) : new THREE.WebGLRenderTarget(1, 1, opt);
+  const mkRT = pr => caps.isWebGL2 && pr < 1.5 && !LOW ? new THREE.WebGLMultisampleRenderTarget(1, 1, opt) : new THREE.WebGLRenderTarget(1, 1, opt);
   const c = new THREE.EffectComposer(renderer, mkRT(renderer.getPixelRatio()));
   c.setPixelRatio(renderer.getPixelRatio()); c.setSize(innerWidth, innerHeight);
   c.addPass(new THREE.RenderPass(scene, camera));
   const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0, BLOOM_THRESHOLD);
   bloom.highPassUniforms.smoothWidth.value = 0.6;
   bloom.compositeMaterial.uniforms.bloomFactors.value = [1, 0.6, 0.25, 0, 0]; // tight glare; the coarsest mips look blocky
+  bloom.enabled = !LOW; c.bloom = bloom;
   c.addPass(bloom);
   c.addPass(new THREE.ShaderPass({
     uniforms: { tDiffuse: { value: null }, uExposure: { value: EXPOSURE } },
@@ -1088,8 +1158,8 @@ const composer = (() => {
       }`,
   }));
   addEventListener('resize', () => {
-    const pr = dprOf();
-    if (!c.renderTarget1.isWebGLMultisampleRenderTarget !== (pr >= 1.5 || !caps.isWebGL2)) c.reset(mkRT(pr)); // the MSAA rule follows the pixel ratio
+    const pr = rdpr();
+    if (!c.renderTarget1.isWebGLMultisampleRenderTarget !== (pr >= 1.5 || !caps.isWebGL2 || LOW)) c.reset(mkRT(pr)); // the MSAA rule follows the pixel ratio
     c.setPixelRatio(pr); c.setSize(innerWidth, innerHeight);
   });
   return c;
@@ -1394,9 +1464,9 @@ function atmosphere(radius) {
         vec3 o = (cameraPosition - uEarthPos) / ${EARTH_R.toFixed(2)}, d = normalize(vW - cameraPosition);
         float b = dot(o, d), c = dot(o, o), dA = b * b - c + RA * RA, dG = b * b - c + 1.0;
         if (dA <= 0.0) discard;
-        float t0 = max(-b - sqrt(dA), 0.0), t1 = dG > 0.0 && -b - sqrt(dG) > 0.0 ? -b - sqrt(dG) : -b + sqrt(dA), ds = (t1 - t0) / 6.0;
+        float t0 = max(-b - sqrt(dA), 0.0), t1 = dG > 0.0 && -b - sqrt(dG) > 0.0 ? -b - sqrt(dG) : -b + sqrt(dA), ds = (t1 - t0) / ${LOW ? 3 : 6}.0;
         vec3 sR = vec3(0.0), sM = vec3(0.0); float vR = 0.0, vM = 0.0;
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < ${LOW ? 3 : 6}; i++) {
           vec3 p = o + d * (t0 + ds * (float(i) + 0.5));
           float r = length(p), h = r - 1.0, dR = exp(-h / HR) * ds, dM = exp(-h / HM) * ds, cs = dot(p, uSunDirE) / r;
           vR += 0.5 * dR; vM += 0.5 * dM;
@@ -1571,7 +1641,7 @@ const loadTex = (url, srgb) => new Promise(res => {
 const loadSeq = (urls, srgb, use) => urls.filter(Boolean).reduce((p, u) => p.then(() => loadTex(u, srgb)).then(t => t && use(t)), Promise.resolve());
 // All maps are equirectangular with 0° longitude in the middle and east to the right (checked against known features).
 // SSS = Solar System Scope (CC BY 4.0). 4k maps only on large screens.
-const HI = renderer.capabilities.maxTextureSize >= 4096 && !matchMedia('(max-width:760px)').matches;
+const HI = !LOW && renderer.capabilities.maxTextureSize >= 4096 && !matchMedia('(max-width:760px)').matches;
 const GH = 'https://cdn.jsdelivr.net/gh/', WIKI = 'https://upload.wikimedia.org/wikipedia/commons/';
 const SSS = GH + 'qtremors/cosmos@69357a767f247dd11bc9396cbcfd40a329dfcfdd/cosmos-app/public/textures/2k_';
 const SSS4K = GH + 'vivekmishra5699/solar@0ed01972b8b3fc199a4da415c3129e67366669e7/8k_'; // SSS "8k" Jupiter/Saturn are 4096 px
@@ -1615,7 +1685,7 @@ function loadRingMaps(colTex, alphaTex) {
 }
 function ensureProcedural() {
   if (proc) return proc;
-  const e = proceduralEarth(), wide = innerWidth > 760, m = proceduralCratered(wide ? 2048 : 1024, wide ? 1024 : 512, { tint: [255, 251, 242], maria: true, seed: 7 });
+  const e = proceduralEarth(), wide = innerWidth > 760 && !LOW, m = proceduralCratered(wide ? 2048 : 1024, wide ? 1024 : 512, { tint: [255, 251, 242], maria: true, seed: 7 });
   proc = { map: canvasTex(e.map, true), bump: canvasTex(e.bump), spec: canvasTex(e.spec), lights: canvasTex(e.lights, true),
            clouds: canvasTex(e.clouds), moon: canvasTex(m.color, true), moonBump: canvasTex(m.bump), moonSrc: m.color };
   return proc;
@@ -1655,7 +1725,7 @@ const EXTRA_TXT = { // user-visible strings (translation pass)
 };
 // Display data in one place (scene units). Moon orbit radius = parent display radius · moonK · sqrt(true distance / parent true
 // radius): monotone, so the order of the moons is kept, and Io (5.9 R) … Callisto (26 R) land at ~2.8–5.9 parent radii.
-const EXTRA_DISPLAY = { moonK: 1.15, parentKm: { jupiter: 71492, saturn: 60268, pluto: 1188.3 }, beltN: 6000, beltPx: 2.2 };
+const EXTRA_DISPLAY = { moonK: 1.15, parentKm: { jupiter: 71492, saturn: 60268, pluto: 1188.3 }, beltN: LOW ? 3000 : 6000, beltPx: 2.2 };
 const SGH = GH + 'sanderblue/solar-system-threejs@e6f0f57968c7dee8e6057619e7a91760622c3256/src/assets/textures/'; // NASA/USGS maps
 const EXTRA_BODIES = [ // r = display radius; map = photo urls (0° longitude in the middle unless shift); tint/seed = procedural fallback
   { key: 'io', parent: 'jupiter', r: 0.32, tint: [232, 208, 118], seed: 3, map: [SGH + 'jupiter/satellites/io.jpg'], shift: true },
@@ -1846,14 +1916,14 @@ const gibsTiles = (() => {
   ].map(([id, sat, r]) => ({ id, sat, ranges: r.split(' ').map(s => s.split('/')) }));
   const MOBILE = matchMedia('(max-width:760px)').matches;
   // k: refine while a tile texel covers more than k CSS px; draw: target tiles on screen; cache: tiles kept (~1.4 MB GPU each).
-  const LIM = MOBILE ? { maxZ: 6, k: 1.6, draw: 16, cache: 24, inflight: 4 } : { maxZ: 8, k: 1, draw: 40, cache: 64, inflight: 6 };
+  const LIM = MOBILE || LOW ? { maxZ: 6, k: 1.6, draw: 16, cache: 24, inflight: 4 } : { maxZ: 8, k: 1, draw: 40, cache: 64, inflight: 6 };
   const MIN_Z = HI ? 3 : 2; // first level finer than the global base map
   const earthMesh = earthSpin.children.find(o => o.material === earthMat), R = earthMesh.geometry.parameters.radius;
   const group = new THREE.Group(); earthMesh.add(group);
-  const cache = new Map(), stats = { requests: 0, bytes: 0, failed: 0, drawn: 0, leaves: 0, inflight: 0, updateMs: 0 };
+  const cache = new Map(), stats = { deferred: 0, requests: 0, bytes: 0, failed: 0, drawn: 0, leaves: 0, inflight: 0, updateMs: 0 };
   const daily = { on: false, want: '', since: 0, date: '', pick: null, layer: null };
   const span = z => 288 / 2 ** z; // tile size in degrees: level 0 is 2 × 1 tiles of 288°, anchored at 180° W, 90° N
-  let frame = 0, fails = 0, pauseUntil = 0, lodK = LIM.k, lodN = 0, dry = false, matVersion = -1, hidClouds = false, now = 0;
+  let frame = 0, built = 0, fails = 0, pauseUntil = 0, lodK = LIM.k, lodN = 0, dry = false, matVersion = -1, hidClouds = false, now = 0;
 
   $('tex').insertAdjacentHTML('afterend', `<label class="chk"><input type="checkbox" id="satDay"> <span data-i18n="satDay">${t('satDay')}</span></label><div class="hint" id="satNote" hidden></div>`);
   $('satDay').onchange = e => { daily.on = e.target.checked; daily.date = ''; if (daily.on) commitDate(dateOf(state.jd)); setNote(); };
@@ -1993,7 +2063,7 @@ const gibsTiles = (() => {
     }
     if (t) t.used = frame;
     if (covered || !t || t.state !== 2) return covered;
-    if (!t.mesh) makeMesh(t);
+    if (!t.mesh) { if (built >= 2) { stats.deferred++; return covered; } built++; makeMesh(t); } // a few uploads per frame; the parent stays up meanwhile
     t.shown = t.shown || now;
     t.mesh.visible = true; t.mesh.material.opacity = min(1, (now - t.shown) / 350); stats.drawn++;
     if (z === minZ && minZ > 0) t.u.uLod.value.set(R * span(z - 1) * D2R / 512 * pxPerRad, lodK); else t.u.uLod.value.set(0, 0);
@@ -2012,7 +2082,7 @@ const gibsTiles = (() => {
     if (!$('satNote').hidden !== (daily.on && state.texSet === 'photo')) setNote();
     if (earthMat.version !== matVersion) { matVersion = earthMat.version; for (const t of cache.values()) if (t.mesh) syncMat(t.mesh.material); }
     for (const t of cache.values()) if (t.mesh) t.mesh.visible = false;
-    stats.drawn = stats.leaves = 0; want.length = 0; let solid = false;
+    stats.drawn = stats.leaves = stats.deferred = 0; built = 0; want.length = 0; let solid = false;
     group.visible = on && litU.uBlur.value === 0; // fast spin smears the globe; tiles would strobe
     if (group.visible) {
       inv.copy(earthMesh.matrixWorld).invert(); camL.copy(camera.position).applyMatrix4(inv);
@@ -2049,7 +2119,12 @@ const gibsTiles = (() => {
   renderer.domElement.addEventListener('webglcontextrestored', () => { // the closed ImageBitmaps can't be re-uploaded: refetch (no dispose: the old GPU objects are already gone)
     for (const t of [...cache.values()]) { t.dead = true; if (t.ctrl) t.ctrl.abort(); if (t.mesh) group.remove(t.mesh); cache.delete(t.key); }
   });
-  return { stats, cache, setNote };
+  // Compile the tile program now (behind the loader): a hidden tile with a 1×1 map, kept alive so the program stays cached.
+  function warm() {
+    const t = { key: 'warm', L: BASE, z: 8, x: 0, y: 0, tex: new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1) };
+    t.tex.encoding = THREE.sRGBEncoding; t.tex.needsUpdate = true; makeMesh(t); t.mesh.visible = false;
+  }
+  return { stats, cache, setNote, warm };
 })();
 
 // ---------------- Milky Way ----------------
@@ -2432,12 +2507,13 @@ function drawChart(year, jan1, daysInYear, doy) {
   g.fillStyle = '#fff'; g.beginPath(); g.arc(X(di), Y(chartCurve[di]), 3 * dpr, 0, TAU); g.fill();
 }
 
-let moonAlbedo = null, phaseKey = '';
+let moonAlbedo = null, albSrc = null, phaseKey = '';
 const ALB_W = 2048;
-function setMoonAlbedo(src) {
+function setMoonAlbedo(src) { if (src !== albSrc) { albSrc = src; moonAlbedo = null; phaseKey = ''; } } // the 8 MB readback waits until the phase view draws
+function readMoonAlbedo() {
   const c = document.createElement('canvas'); c.width = ALB_W; c.height = ALB_W / 2; // 2048: sharp in the enlarged view
-  const g = c.getContext('2d'); g.drawImage(src, 0, 0, ALB_W, ALB_W / 2);
-  moonAlbedo = g.getImageData(0, 0, ALB_W, ALB_W / 2).data; phaseKey = '';
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(albSrc, 0, 0, ALB_W, ALB_W / 2);
+  moonAlbedo = g.getImageData(0, 0, ALB_W, ALB_W / 2).data;
 }
 // The parts of drawPhase that depend only on the size n: per disc pixel its destination index, x, z, albedo index and alpha.
 let phaseGeo = null;
@@ -2456,7 +2532,8 @@ function phaseGeom(n) {
 function drawPhase(elong, waxing, south) {
   const cv = $('phase'), n = min(900, round(hudBox.phase * dprOf())); // follows the enlarged view; 900 caps a redraw at ~6 ms
   const key = `${round(elong * R2D * (n > 400 ? 4 : 1))}|${waxing}|${south}|${n}`; // ¼° steps when enlarged
-  if (!moonAlbedo || !hudBox.phase || key === phaseKey) return;
+  if (!albSrc || !hudBox.phase || key === phaseKey) return;
+  if (!moonAlbedo) readMoonAlbedo();
   phaseKey = key;
   if (cv.width !== n) cv.width = cv.height = n;
   const g = cv.getContext('2d');
@@ -2535,20 +2612,20 @@ const TXT = {
   yearTl: 'Day of the year: drag through the seasons', dayTl: 'Time of day: drag to turn Earth through one day',
   approx: '≈ approx.', approxTip: (a, b) => `Positions outside ${a}–${b} are approximate`,
   year: 'Year', month: 'Month', day: 'Day', hour: 'Hour', minute: 'Minute', go: 'Go',
-  calNote: 'Any year: type 585 BCE or −584 (year 0 = 1 BCE). Julian calendar before 15 Oct 1582, Gregorian after, as in NASA eclipse catalogues.',
+  calNote: 'Any year: type 585 BCE or −584 (year 0 = 1 BCE). Julian calendar before Oct 15, 1582, Gregorian after, as in NASA eclipse catalogs.',
   errYear: 'Year: type e.g. 2026, 585 BCE or −584', errDay: 'Day must be a whole number 1–31', errHour: 'Hour must be 0–23', errMin: 'Minute must be 0–59',
-  errNoDay: (d, mon, y) => `There is no ${d} ${mon} ${y}`, errGap: '5–14 October 1582 were skipped by the Gregorian reform',
+  errNoDay: (d, mon, y) => `There is no ${mon} ${d}, ${y}`, errGap: 'October 5–14, 1582 were skipped by the Gregorian reform',
   prev: 'Previous', next: 'Next', history: 'History', noSearch: 'Events cannot be searched this far from the present',
-  ev: { newMoon: 'New Moon', firstQ: 'First quarter', fullMoon: 'Full Moon', lastQ: 'Last quarter', season: 'Equinox / solstice', solar: 'Solar eclipse', lunar: 'Lunar eclipse' },
+  ev: { newMoon: 'New Moon', firstQ: 'First Quarter', fullMoon: 'Full Moon', lastQ: 'Last Quarter', season: 'Equinox / solstice', solar: 'Solar eclipse', lunar: 'Lunar eclipse' },
   seasons: ['March equinox', 'June solstice', 'September equinox', 'December solstice'],
   solar: { total: 'Total solar eclipse', annular: 'Annular solar eclipse', partial: 'Partial solar eclipse' },
   lunar: { total: 'Total lunar eclipse', partial: 'Partial lunar eclipse', penumbral: 'Penumbral lunar eclipse' },
-  hist: { thales: 'Thales’ eclipse', columbus: 'Columbus’ lunar eclipse', eddington: 'Eddington’s eclipse', apollo: 'Apollo 11 Moon landing' },
+  hist: { thales: 'Thales’ eclipse', columbus: 'Columbus’s lunar eclipse', eddington: 'Eddington’s eclipse', apollo: 'Apollo 11 Moon landing' },
 };
 state.tz = 'utc'; state.reverse = false;
 let scrubbing = false, marksKey = '', toastTimer = 0;
 
-// Calendar date ↔ JD (Meeus ch. 7) for any year, counted as historians and NASA's eclipse catalogues do: Julian calendar
+// Calendar date ↔ JD (Meeus ch. 7) for any year, counted as historians and NASA's eclipse catalogs do: Julian calendar
 // before 1582-10-15, Gregorian after, astronomical years (0 = 1 BCE). JS Date only knows the proleptic Gregorian calendar.
 function calToJd(y, m, d) { // d may carry the fraction of the day
   const greg = y * 1e4 + m * 100 + d >= 15821015;
@@ -2806,7 +2883,7 @@ function applyEditor() {
 function hashStr() {
   const c = jdToCal(state.jd), s = state.simSpeed;
   return `#d=${c.y}-${pad2(c.m)}-${pad2(c.d)}T${fmtTime(c.f)}Z&lat=${+state.latitude.toFixed(2)}&cam=${cam.mode === 'follow' ? 'follow:' + cam.follow : cam.mode}` +
-    `&s=${abs(s - REALTIME) / REALTIME < 0.02 ? 'real' : +s.toPrecision(3)}${state.reverse ? '&rev=1' : ''}${$('hebChk').checked ? '' : '&hd=0'}${state.isPlaying ? '' : '&paused=1'}`;
+    `&s=${abs(s - REALTIME) / REALTIME < 0.02 ? 'real' : +s.toPrecision(3)}${QFORCE ? '&q=' + QFORCE : ''}${state.reverse ? '&rev=1' : ''}${$('hebChk').checked ? '' : '&hd=0'}${state.isPlaying ? '' : '&paused=1'}`;
 }
 function hashJd(s) { // NaN unless the text is a date within the calendar's range (a huge year overflows to Infinity)
   const d = /^(-?\d+)-(\d+)-(\d+)T(\d+):(\d+):?([\d.]*)Z?$/.exec(s || '');
@@ -2930,19 +3007,32 @@ function setLatitude(lat, fromPlace) {
 }
 // Show the overlay for a moment of heavy texture generation (lets it paint first).
 function busy(msg, fn) {
-  const ov = $('loading'); ov.textContent = msg; ov.style.display = ''; ov.style.opacity = 0.85;
+  const ov = $('loading'); ov.querySelector('.ldtext').textContent = msg; ov.style.display = ''; ov.style.opacity = 0.85;
   setTimeout(() => { fn(); ov.style.display = 'none'; }, 30);
 }
+// Fades every line material under g in or out over 250 ms (instant under reduced motion), keeping the render loop at full rate meanwhile.
+function fadeLines(g, on) {
+  const f = g.userData.fade ||= { k: g.visible ? 1 : 0 }, k0 = f.k, t0 = performance.now(), D = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 250;
+  cancelAnimationFrame(f.raf); g.visible = true;
+  const step = now => {
+    const p = D ? clamp((now - t0) / D, 0, 1) : 1, e = 1 - (1 - p) ** 3;
+    f.k = on ? k0 + (1 - k0) * e : k0 * (1 - e);
+    g.traverse(o => { const m = o.material; if (m) m.opacity = (m.userData.o ??= m.opacity) * f.k; });
+    wake(120);
+    if (p < 1) f.raf = requestAnimationFrame(step); else g.visible = on;
+  };
+  step(t0);
+}
 function applyPlanets() {
-  planetGroup.visible = planetOrbits.visible = state.showPlanets;
-  $('camPlanets').disabled = !state.showPlanets;
+  planetGroup.visible = state.showPlanets; fadeLines(planetOrbits, state.showPlanets);
+  $('camPlanets').disabled = $('camPlanets').hidden = !state.showPlanets; // no empty 'Planets' heading at the end of the list
   if (cam.mode === 'free' || cam.mode === 'top') setCamMode(cam.mode);
   if (cam.mode === 'follow' && bodies[cam.follow].planet && !state.showPlanets) setCamMode('free');
 }
 function bindUI() {
   bindTimeBar();
   $('cam').onchange = e => { const [m, f] = e.target.value.split(':'); setCamMode(m, f); };
-  $('orbits').onchange = e => { state.showOrbits = e.target.checked; orbitGroup.visible = state.showOrbits; };
+  $('orbits').onchange = e => { state.showOrbits = e.target.checked; fadeLines(orbitGroup, state.showOrbits); };
   $('planets').onchange = e => {
     state.showPlanets = e.target.checked;
     state.showPlanets && !planetsBuilt ? busy(t('addingPlanets'), () => { buildPlanets(); applyPlanets(); }) : applyPlanets();
@@ -2964,8 +3054,8 @@ function bindUI() {
   if (matchMedia('(max-width:760px)').matches) document.querySelectorAll('.collapse').forEach(b => b.click());
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    renderer.setPixelRatio(dprOf()); renderer.setSize(innerWidth, innerHeight); chartKey = ''; phaseKey = '';
-    sky.stars.material.uniforms.uDpr.value = dprOf(); beltU.uPx.value = EXTRA_DISPLAY.beltPx * dprOf();
+    renderer.setPixelRatio(rdpr()); renderer.setSize(innerWidth, innerHeight); chartKey = ''; phaseKey = '';
+    sky.stars.material.uniforms.uDpr.value = rdpr(); beltU.uPx.value = EXTRA_DISPLAY.beltPx * rdpr();
   });
 }
 
@@ -3037,7 +3127,7 @@ function updateAstronomyAndUI(time) {
 // (a body at real-time speed) accumulates until the next floor draw instead of forcing 60 fps.
 const drawn = { t: 0, e: new Array(12).fill(0), o: new V3(), fov: 0, jd: 0, expo: 0, sunK: 0 }, pose = new V3();
 const tilesBusy = () => { // GIBS tiles still loading or fading in (their fade runs inside render)
-  if (gibsTiles.stats.inflight) return true;
+  if (gibsTiles.stats.inflight || gibsTiles.stats.deferred) return true;
   for (const t of gibsTiles.cache.values()) if (t.mesh && t.mesh.visible && t.mesh.material.opacity < 1) return true;
   return false;
 };
@@ -3063,7 +3153,22 @@ function animate() {
   updateCamera(dt);
   updateLabels();
   updateLighting(dt, a);
-  if (needsDraw(now)) { composer ? composer.render(dt) : renderer.render(scene, camera); markDrawn(now); }
+  const drew = needsDraw(now);
+  if (drew) { composer ? composer.render(dt) : renderer.render(scene, camera); markDrawn(now); }
+  if (QFORCE !== 'high') autoQuality(drew && drewPrev, raw, now);
+  drewPrev = drew;
+}
+// Run-time step-down: when the median of 45 back-to-back drawn frames is over 40 ms, cut the render resolution (×0.8, to ×0.5),
+// then switch bloom off. Starts when the loader hides; no step back up (it would oscillate).
+let drewPrev = false, settleUntil = Infinity; const frameBuf = [];
+function autoQuality(active, raw, now) {
+  if (!active || raw > 0.5 || now < settleUntil) return;
+  frameBuf.push(raw); if (frameBuf.length < 45) return;
+  const med = frameBuf.sort((a, b) => a - b)[22]; frameBuf.length = 0;
+  if (med < 0.04) return; // above 33 ms: Chrome's Energy Saver caps a healthy page at 30 fps
+  settleUntil = now + 2000;
+  if (resScale > 0.5) { resScale = max(0.5, resScale * 0.8); dispatchEvent(new Event('resize')); }
+  else if (composer && composer.bloom.enabled) composer.bloom.enabled = false;
 }
 
 // ---------------- Start ----------------
@@ -3071,7 +3176,7 @@ applyLang();
 bindUI();
 setSpeed(REALTIME); // open at the real pace of the sky; a shared link can still set its own speed
 setLatitude(state.latitude);
-$('camPlanets').disabled = true;
+$('camPlanets').disabled = $('camPlanets').hidden = true;
 updateAstronomyAndUI(0);
 setCamMode('follow', 'earth');
 animate();
@@ -3081,10 +3186,13 @@ const all = Promise.all(names.map((n, i) => loadTex(TEX_BASE + n, i === 0 || i >
 const gotPhotos = r => {
   [photo.map, photo.normal, photo.spec, photo.clouds, photo.lights, photo.moon] = r; photoOk = true;
 };
-const upgradePhotos = () => { for (const [k, srgb, ...urls] of UPGRADES) loadSeq(urls, srgb, t => {
+const idleQ = []; // a 4k upload costs tens of ms: swaps wait for a quiet moment (no input for 1.5 s, or 20 s at most), one at a time
+const idleTick = () => { const j = idleQ[0]; if (j && (performance.now() - userAt > 1500 || performance.now() > j.by)) idleQ.shift().go(); if (idleQ.length) setTimeout(idleTick, 400); };
+const whenIdle = go => new Promise(res => { idleQ.push({ go: () => { go(); res(); }, by: performance.now() + 20000 }); if (idleQ.length === 1) setTimeout(idleTick, 400); });
+const upgradePhotos = () => { for (const [k, srgb, ...urls] of UPGRADES) loadSeq(urls, srgb, t => whenIdle(() => {
   if (photo[k]) photo[k].dispose();
   photo[k] = t; if (state.texSet === 'photo') applyTextures();
-}); };
+})); };
 Promise.race([all, timeout]).then(r => {
   if (r && r.every(Boolean)) gotPhotos(r);
   else {
@@ -3098,11 +3206,21 @@ Promise.race([all, timeout]).then(r => {
     });
   }
   applyTextures();
-  const ov = $('loading'); ov.style.opacity = 0; setTimeout(() => { ov.style.display = 'none'; }, 700);
-  document.body.classList.add('enter'); setTimeout(() => document.body.classList.remove('enter'), 900);
-  if (photoOk) upgradePhotos();
+  try { // compile for the target the frames really draw into (HDR composer: linear output), else every program is built twice
+    if (composer) renderer.setRenderTarget(composer.readBuffer);
+    gibsTiles.warm(); renderer.compile(scene, camera);
+  } catch (e) {} renderer.setRenderTarget(null); // build the shaders now, behind the loader, not on the first click
+  // Keep the loader up until the 3D view draws smoothly: 20 frames in a row under 40 ms, at least 1 s, at most 6 s.
+  const t0 = performance.now(); let prev = t0, calm = 0;
+  (function wait(now) {
+    calm = now - prev < 40 ? calm + 1 : 0; prev = now;
+    if ((calm < 20 || now - t0 < 1000) && now - t0 < 6000) return requestAnimationFrame(wait);
+    const ov = $('loading'); ov.style.opacity = 0; setTimeout(() => { ov.style.display = 'none'; }, 700);
+    settleUntil = performance.now() + 2500; document.body.classList.add('enter'); setTimeout(() => document.body.classList.remove('enter'), 900);
+    if (photoOk) upgradePhotos();
+  })(t0);
 });
-window.sim = { state, astro, setCamMode, camera, controls, cam, moonMat, earthMat, sky, skyQ, earthTilt }; // console access for inspection
+window.sim = { state, astro, setCamMode, camera, controls, cam, moonMat, earthMat, sky, skyQ, earthTilt, quality: () => ({ LOW, QFORCE, resScale, pr: renderer.getPixelRatio(), bloom: !!composer && composer.bloom.enabled, programs: renderer.info.programs.length }) }; // console access for inspection
 });
 </script>
 </body>
