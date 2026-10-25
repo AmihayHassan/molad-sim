@@ -424,7 +424,7 @@ const HE_FACTS = (() => {
     neptune: { type: ice, day: h(16.1), year: y(164.8), temp: C(-200) },
     io: moon('ירח של צדק', 1.77, 'צדק', -143), europa: moon('ירח של צדק', 3.55, 'צדק', -171), ganymede: moon('ירח של צדק', 7.15, 'צדק', -163),
     callisto: moon('ירח של צדק', 16.69, 'צדק', -139), titan: moon('ירח של שבתאי', 15.95, 'שבתאי', -179), charon: moon('ירח של פלוטו', 6.39, 'פלוטו', -220),
-    pluto: { type: 'כוכב לכת ננסי', day: d(6.39) + retro, year: y(247.9), temp: C(-229) },
+    pluto: { type: 'כוכב לכת ננסי', day: d(6.39) + retro, year: y(247.9), temp: C(-225) },
     ceres: { type: 'כוכב לכת ננסי (חגורת האסטרואידים)', day: h(9.07), year: y('4.60'), temp: C(-105) },
   };
 })();
@@ -513,7 +513,6 @@ let AU = 58;                   // Earth orbit radius, scene units (the true-scal
 let MOON_ORBIT = 8.5;          // mean Earth–Moon distance, scene units (the true-scale view changes it)
 const OBLIQ = 23.4392911 * D2R; // J2000 obliquity: Ceres/Pluto elements and the star frame (cancels against OBL_X); the tilt of date comes from astro()
 const KM_PER_AU = Astronomy.KM_PER_AU, C_KMS = KM_PER_AU * Astronomy.C_AUDAY / 86400, EARTH_KM = 6371; // C_KMS = 299 792.458
-const SYNODIC = 29.53;         // days
 const MOON_INCL = 5.14 * D2R;
 const MOON_MEAN_KM = 385001;
 const SUN_R = 5, EARTH_R = 1.6, MOON_R = EARTH_R * 0.2727;
@@ -1086,18 +1085,7 @@ function ringCanvases() {
 // ---------------- Renderer, camera, lights ----------------
 const dprOf = () => min(devicePixelRatio || 1, matchMedia('(pointer: coarse)').matches ? 1.5 : 2); // the one pixel-ratio source; touch screens pay more per pixel
 const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true });
-// Quality tier. #q=low / #q=high wins; else weak hardware (software GL, mobile GPUs, ≤4 cores and ≤4 GB, no half-float
-// targets) starts low, and a slow frame rate steps down further at run time (autoQuality; never with q=high). Low: 1× pixels, no MSAA
-// or bloom, 3 atmosphere steps, no 4k maps, fewer tiles and belt points.
-const QFORCE = (/[#&]q=(low|high)\b/.exec(location.hash) || [])[1];
-const LOW = QFORCE ? QFORCE === 'low' : (() => {
-  const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'), ex = renderer.extensions;
-  return /swiftshader|llvmpipe|softpipe|basic render|mali|adreno|powervr|intel.*\b(hd|uhd)\b/i.test(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : '') ||
-    (navigator.hardwareConcurrency <= 4 && navigator.deviceMemory <= 4) || !(renderer.capabilities.isWebGL2 && ex.has('EXT_color_buffer_float') || ex.has('EXT_color_buffer_half_float'));
-})();
-let resScale = 1; // run-time resolution step-down
-const rdpr = () => max(0.5, min(dprOf(), LOW ? 1 : 2) * resScale); // what the WebGL canvas renders at; dprOf() stays the CSS-pixel truth for the HUD canvases
-renderer.setPixelRatio(rdpr());
+renderer.setPixelRatio(dprOf());
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -1134,14 +1122,13 @@ const composer = (() => {
   if (!THREE.UnrealBloomPass || !(caps.isWebGL2 && ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float'))) return null;
   const opt = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
   // MSAA replaces the canvas antialiasing, which render targets don't get; skipped on high-DPR screens (memory).
-  const mkRT = pr => caps.isWebGL2 && pr < 1.5 && !LOW ? new THREE.WebGLMultisampleRenderTarget(1, 1, opt) : new THREE.WebGLRenderTarget(1, 1, opt);
+  const mkRT = pr => caps.isWebGL2 && pr < 1.5 ? new THREE.WebGLMultisampleRenderTarget(1, 1, opt) : new THREE.WebGLRenderTarget(1, 1, opt);
   const c = new THREE.EffectComposer(renderer, mkRT(renderer.getPixelRatio()));
   c.setPixelRatio(renderer.getPixelRatio()); c.setSize(innerWidth, innerHeight);
   c.addPass(new THREE.RenderPass(scene, camera));
   const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.45, 0, BLOOM_THRESHOLD);
   bloom.highPassUniforms.smoothWidth.value = 0.6;
   bloom.compositeMaterial.uniforms.bloomFactors.value = [1, 0.6, 0.25, 0, 0]; // tight glare; the coarsest mips look blocky
-  bloom.enabled = !LOW; c.bloom = bloom;
   c.addPass(bloom);
   c.addPass(new THREE.ShaderPass({
     uniforms: { tDiffuse: { value: null }, uExposure: { value: EXPOSURE } },
@@ -1158,8 +1145,8 @@ const composer = (() => {
       }`,
   }));
   addEventListener('resize', () => {
-    const pr = rdpr();
-    if (!c.renderTarget1.isWebGLMultisampleRenderTarget !== (pr >= 1.5 || !caps.isWebGL2 || LOW)) c.reset(mkRT(pr)); // the MSAA rule follows the pixel ratio
+    const pr = dprOf();
+    if (!c.renderTarget1.isWebGLMultisampleRenderTarget !== (pr >= 1.5 || !caps.isWebGL2)) c.reset(mkRT(pr)); // the MSAA rule follows the pixel ratio
     c.setPixelRatio(pr); c.setSize(innerWidth, innerHeight);
   });
   return c;
@@ -1464,9 +1451,9 @@ function atmosphere(radius) {
         vec3 o = (cameraPosition - uEarthPos) / ${EARTH_R.toFixed(2)}, d = normalize(vW - cameraPosition);
         float b = dot(o, d), c = dot(o, o), dA = b * b - c + RA * RA, dG = b * b - c + 1.0;
         if (dA <= 0.0) discard;
-        float t0 = max(-b - sqrt(dA), 0.0), t1 = dG > 0.0 && -b - sqrt(dG) > 0.0 ? -b - sqrt(dG) : -b + sqrt(dA), ds = (t1 - t0) / ${LOW ? 3 : 6}.0;
+        float t0 = max(-b - sqrt(dA), 0.0), t1 = dG > 0.0 && -b - sqrt(dG) > 0.0 ? -b - sqrt(dG) : -b + sqrt(dA), ds = (t1 - t0) / 6.0;
         vec3 sR = vec3(0.0), sM = vec3(0.0); float vR = 0.0, vM = 0.0;
-        for (int i = 0; i < ${LOW ? 3 : 6}; i++) {
+        for (int i = 0; i < 6; i++) {
           vec3 p = o + d * (t0 + ds * (float(i) + 0.5));
           float r = length(p), h = r - 1.0, dR = exp(-h / HR) * ds, dM = exp(-h / HM) * ds, cs = dot(p, uSunDirE) / r;
           vR += 0.5 * dR; vM += 0.5 * dM;
@@ -1512,6 +1499,55 @@ function rebuildLatRing() {
   latRing.rotation.x = PI / 2; latRing.position.y = R * sin(phi);
   guides.add(latRing);
   observer.position.set(R * cos(phi), R * sin(phi), 0);
+}
+// The observer's zenith in the scene, at the chosen place's longitude (0° for a custom latitude, like the marker's). The telescope
+// view keeps it up and the phase view turns to match, so the Moon is tilted as it looks from there (equator: the crescent lies flat).
+// The zenith turns once a day, which at a fast pace is a constant spin, so the tilt is a blend of two rules by speed: the true one
+// (zenith up, exact at real-time and slow speeds) and a steady one (below) that fades in between 10 min/s and 2 h/s, so a speed change
+// never snaps. Every change of target is also eased, one way and at most 90°/s.
+// Steady rule: the tilt seen from the place at a viewing hour angle H that follows the phase: dusk for a waxing Moon (H ≈ 90° − E/2),
+// upper transit at full Moon (up all night), dawn for a waning one (−90°); around new Moon (|E| < 35°) H sweeps back from −90° to +90°
+// through transit, so the disc turns one way over days instead of flipping where dusk meets dawn. The tilt is celestial north (turned
+// by the ecliptic pole's angle κ·rn, kept in the tropics where it cancels part of the Moon's declination wobble, faded out toward the poles
+// where it would be the only wobble) minus the parallactic angle q(H, φ, δ): continuous in time, φ and δ. A Moon passing the zenith
+// really flips there; the follower spreads that turn out.
+const zen = new V3(), rA = new V3(), rB = new V3(), rC = new V3(), rD = new V3(), rE = new V3(), rF = new V3(), phaseSun = new V3();
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)'), wrapA = x => atan2(sin(x), cos(x));
+let rollNow = 0, rollT = 0, rollGap = 0, rollU = 0, tgtU = 0; // rollGap: live tilt minus steady one, unwrapped so that fading it out never spins; rollU, tgtU: roll and target unwrapped, so a chase never turns round
+function observerZenith() {
+  const pl = PLACES[$('place').selectedIndex], lon = (pl && pl[1] !== null ? pl[2] : 0) * D2R, phi = state.latitude * D2R;
+  earthSpin.updateWorldMatrix(true, false);
+  return zen.set(cos(phi) * cos(lon), sin(phi), -cos(phi) * sin(lon)).transformDirection(earthSpin.matrixWorld);
+}
+// The phase view's frame, looking from Earth at the Moon with ecliptic north up: sets phaseSun (the Sun's direction from the Moon;
+// x right, y up, z toward Earth) and returns the eased roll from that up to the shared up, about the line of sight.
+function phaseView() {
+  const d = rA.subVectors(moonGroup.position, earthGroup.position).normalize(), z = observerZenith();
+  const a = rB.copy(UP).addScaledVector(d, -d.y).normalize(), b = rC.copy(z).addScaledVector(d, -d.dot(z)), r = rD.crossVectors(d, a);
+  const s = eclU.uSunDirE.value; // the true direction: the scene's Sun distance is compressed ~57× against the Moon's orbit
+  phaseSun.set(s.dot(r), s.dot(a), -s.dot(d)).normalize();
+  const rollOf = v => atan2(d.dot(rE.crossVectors(a, v)), a.dot(v));
+  const n = rF.set(0, 1, 0).transformDirection(earthSpin.matrixWorld); // celestial north (earthSpin's world matrix is fresh from observerZenith)
+  const phi = state.latitude * D2R, dec = asin(clamp(d.dot(n), -1, 1)), e0 = atan2(phaseSun.x, -phaseSun.z); // e0: elongation from new Moon, −π..π (waxing +)
+  const wn = 35 * D2R, H = PI / 2 * (2 * smooth(-wn, wn, e0) - 1) - e0 / 2; // viewing hour angle, west +
+  const q = atan2(cos(phi) * sin(H), sin(phi) * cos(dec) - cos(phi) * sin(dec) * cos(H));
+  const live = rollOf(b), steady = (1 - smooth(35 * D2R, 65 * D2R, abs(phi))) * rollOf(n) - q;
+  const rate = state.isPlaying ? state.simSpeed * DAYS_PER_SEC * 86400 : 0; // sim seconds per second
+  const w = smooth(Math.log10(600), Math.log10(7200), Math.log10(max(rate, 1)));
+  rollGap = w >= 1 || !rollT ? wrapA(live - steady) : rollGap + wrapA(live - steady - rollGap);
+  const target = steady + (1 - w) * rollGap;
+  const now = performance.now(), first = !rollT, dt = min(0.1, (now - rollT) / 1000); rollT = now;
+  const fast = reduceMotion.matches || first;
+  tgtU = first ? target : tgtU + wrapA(target - tgtU);
+  rollU += clamp((tgtU - rollU) * (fast ? 1 : 1 - exp(-dt / 0.11)), -(fast ? 7 : PI / 2 * dt), fast ? 7 : PI / 2 * dt); // never faster than 90°/s
+  if (abs(tgtU - rollU) > TAU) rollU += TAU * Math.sign(tgtU - rollU); // a lag of whole turns shows nothing: drop it
+  rollNow = wrapA(rollU);
+  return rollNow;
+}
+// The shared up of the telescope camera: the ecliptic-north-up frame turned by the eased roll about the line of sight.
+function moonUp() {
+  const d = rA.subVectors(moonGroup.position, earthGroup.position).normalize(), a = rB.copy(UP).addScaledVector(d, -d.y).normalize();
+  return rE.copy(a).multiplyScalar(cos(rollNow)).addScaledVector(rD.crossVectors(d, a), sin(rollNow));
 }
 
 // ---------------- Moon ----------------
@@ -1641,7 +1677,7 @@ const loadTex = (url, srgb) => new Promise(res => {
 const loadSeq = (urls, srgb, use) => urls.filter(Boolean).reduce((p, u) => p.then(() => loadTex(u, srgb)).then(t => t && use(t)), Promise.resolve());
 // All maps are equirectangular with 0° longitude in the middle and east to the right (checked against known features).
 // SSS = Solar System Scope (CC BY 4.0). 4k maps only on large screens.
-const HI = !LOW && renderer.capabilities.maxTextureSize >= 4096 && !matchMedia('(max-width:760px)').matches;
+const HI = renderer.capabilities.maxTextureSize >= 4096 && !matchMedia('(max-width:760px)').matches;
 const GH = 'https://cdn.jsdelivr.net/gh/', WIKI = 'https://upload.wikimedia.org/wikipedia/commons/';
 const SSS = GH + 'qtremors/cosmos@69357a767f247dd11bc9396cbcfd40a329dfcfdd/cosmos-app/public/textures/2k_';
 const SSS4K = GH + 'vivekmishra5699/solar@0ed01972b8b3fc199a4da415c3129e67366669e7/8k_'; // SSS "8k" Jupiter/Saturn are 4096 px
@@ -1665,7 +1701,7 @@ const swappable = [];
 const swapTex = s => { const im = state.texSet === 'photo' && s.photo || s.proc; if (s.tex.image !== im) { s.tex.image = im; s.tex.needsUpdate = true; } };
 const slot = tex => { const s = { tex, proc: tex.image, photo: null }; swappable.push(s); return s; };
 const setPhoto = (s, im) => { s.photo = im; swapTex(s); };
-function loadPlanetMap(p, tex) { const s = slot(tex); loadSeq(PLANET_MAPS[p.key], false, t => setPhoto(s, t.image)); }
+function loadPlanetMap(p, tex) { const s = slot(tex); loadSeq(PLANET_MAPS[p.key], false, t => { setPhoto(s, t.image); if (!planetGroup.visible) renderer.initTexture(tex); }); } // upload now, not on the first show
 // The SSS ring strip spans 1.1513–2.3402 Saturn radii (fitted to its B-ring edge, Encke gap and A-ring edge), colour in RGB
 // and opacity in A. Resample it to RING_IN..RING_OUT with opacity in the green channel, where the shaders read it.
 function loadRingMaps(colTex, alphaTex) {
@@ -1685,7 +1721,7 @@ function loadRingMaps(colTex, alphaTex) {
 }
 function ensureProcedural() {
   if (proc) return proc;
-  const e = proceduralEarth(), wide = innerWidth > 760 && !LOW, m = proceduralCratered(wide ? 2048 : 1024, wide ? 1024 : 512, { tint: [255, 251, 242], maria: true, seed: 7 });
+  const e = proceduralEarth(), wide = innerWidth > 760, m = proceduralCratered(wide ? 2048 : 1024, wide ? 1024 : 512, { tint: [255, 251, 242], maria: true, seed: 7 });
   proc = { map: canvasTex(e.map, true), bump: canvasTex(e.bump), spec: canvasTex(e.spec), lights: canvasTex(e.lights, true),
            clouds: canvasTex(e.clouds), moon: canvasTex(m.color, true), moonBump: canvasTex(m.bump), moonSrc: m.color };
   return proc;
@@ -1718,14 +1754,14 @@ const EXTRA_TXT = { // user-visible strings (translation pass)
     ganymede: { type: 'Moon of Jupiter', day: '7.15 d (tidally locked)', year: '7.15 d around Jupiter', moons: '—', temp: '−163 °C' },
     callisto: { type: 'Moon of Jupiter', day: '16.69 d (tidally locked)', year: '16.69 d around Jupiter', moons: '—', temp: '−139 °C' },
     titan:    { type: 'Moon of Saturn', day: '15.95 d (tidally locked)', year: '15.95 d around Saturn', moons: '—', temp: '−179 °C' },
-    pluto:    { type: 'Dwarf planet', day: '6.39 d (retrograde)', year: '247.9 yr', moons: '5', temp: '−229 °C' },
+    pluto:    { type: 'Dwarf planet', day: '6.39 d (retrograde)', year: '247.9 yr', moons: '5', temp: '−225 °C' },
     charon:   { type: 'Moon of Pluto', day: '6.39 d (tidally locked)', year: '6.39 d around Pluto', moons: '—', temp: '−220 °C' },
     ceres:    { type: 'Dwarf planet (asteroid belt)', day: '9.07 h', year: '4.60 yr', moons: '0', temp: '−105 °C' },
   },
 };
 // Display data in one place (scene units). Moon orbit radius = parent display radius · moonK · sqrt(true distance / parent true
 // radius): monotone, so the order of the moons is kept, and Io (5.9 R) … Callisto (26 R) land at ~2.8–5.9 parent radii.
-const EXTRA_DISPLAY = { moonK: 1.15, parentKm: { jupiter: 71492, saturn: 60268, pluto: 1188.3 }, beltN: LOW ? 3000 : 6000, beltPx: 2.2 };
+const EXTRA_DISPLAY = { moonK: 1.15, parentKm: { jupiter: 71492, saturn: 60268, pluto: 1188.3 }, beltN: 6000, beltPx: 2.2 };
 const SGH = GH + 'sanderblue/solar-system-threejs@e6f0f57968c7dee8e6057619e7a91760622c3256/src/assets/textures/'; // NASA/USGS maps
 const EXTRA_BODIES = [ // r = display radius; map = photo urls (0° longitude in the middle unless shift); tint/seed = procedural fallback
   { key: 'io', parent: 'jupiter', r: 0.32, tint: [232, 208, 118], seed: 3, map: [SGH + 'jupiter/satellites/io.jpg'], shift: true },
@@ -1916,7 +1952,7 @@ const gibsTiles = (() => {
   ].map(([id, sat, r]) => ({ id, sat, ranges: r.split(' ').map(s => s.split('/')) }));
   const MOBILE = matchMedia('(max-width:760px)').matches;
   // k: refine while a tile texel covers more than k CSS px; draw: target tiles on screen; cache: tiles kept (~1.4 MB GPU each).
-  const LIM = MOBILE || LOW ? { maxZ: 6, k: 1.6, draw: 16, cache: 24, inflight: 4 } : { maxZ: 8, k: 1, draw: 40, cache: 64, inflight: 6 };
+  const LIM = MOBILE ? { maxZ: 6, k: 1.6, draw: 16, cache: 24, inflight: 4 } : { maxZ: 8, k: 1, draw: 40, cache: 64, inflight: 6 };
   const MIN_Z = HI ? 3 : 2; // first level finer than the global base map
   const earthMesh = earthSpin.children.find(o => o.material === earthMat), R = earthMesh.geometry.parameters.radius;
   const group = new THREE.Group(); earthMesh.add(group);
@@ -2158,7 +2194,8 @@ addBody('earth', { name: 'Earth', obj: earthGroup, r: EARTH_R, dist: 24 });
 addBody('moon', { name: 'Moon', obj: moonGroup, r: MOON_R, dist: 3.2 });
 
 const UP = new V3(0, 1, 0), goalPos = new V3(), goalTarget = new V3(), tA = new V3(), tB = new V3();
-const cam = { mode: 'free', follow: 'earth', offset: new V3(), t: 1, fromPos: new V3(), fromTarget: new V3(), fromFov: 45, lens: 1 };
+const cam = { mode: 'free', follow: 'earth', offset: new V3(), t: 1, fromPos: new V3(), fromTarget: new V3(), fromFov: 45, lens: 1, fromUp: new V3(0, 1, 0) };
+const goalUp = () => cam.mode === 'earthMoon' ? moonUp() : UP, qUp = new THREE.Quaternion(), q0 = new THREE.Quaternion();
 const LOCKED = { earthMoon: 1, moonEarth: 1, terminator: 1 };
 function computeGoal() {
   const E = earthGroup.position, M = moonGroup.position;
@@ -2183,7 +2220,7 @@ function setCamMode(mode, follow) {
     cam.offset.normalize().multiplyScalar(b.dist);
     controls.minDistance = b.r * (cam.follow === 'earth' ? 1.05 : 1.4); // Earth: close enough for the finest NASA tiles (250 m daily, level 8)
   } else { controls.minDistance = bodies.sun.r * 1.3; controls.rotateSpeed = 1; controls.zoomSpeed = TS.on ? 2 : 1; } // the follow-view slowdown must not outlast the transition
-  cam.fromPos.copy(camera.position); cam.fromTarget.copy(controls.target); cam.fromFov = camera.fov; cam.t = 0; cam.lens = 1;
+  cam.fromPos.copy(camera.position); cam.fromTarget.copy(controls.target); cam.fromFov = camera.fov; cam.fromUp.copy(camera.up); cam.t = 0; cam.lens = 1;
   controls.enabled = !LOCKED[mode];
   $('cam').value = mode === 'follow' ? 'follow:' + cam.follow : mode;
 }
@@ -2196,6 +2233,8 @@ function updateCamera(dt) {
     camera.position.lerpVectors(cam.fromPos, goalPos, k);
     controls.target.lerpVectors(cam.fromTarget, goalTarget, k);
     camera.fov = mix(cam.fromFov, fov, k); camera.updateProjectionMatrix();
+    camera.up.copy(cam.fromUp).applyQuaternion(q0.identity().slerp(qUp.setFromUnitVectors(cam.fromUp, goalUp()), k)); // setFromUnitVectors copes with opposite ups
+    if (cam.t === 1 && !LOCKED[cam.mode]) camera.up.copy(UP); // OrbitControls assume the default up
     camera.lookAt(controls.target);
     lastBody.copy(goalTarget);
     return;
@@ -2210,7 +2249,7 @@ function updateCamera(dt) {
     controls.rotateSpeed = k; controls.zoomSpeed = (TS.on ? 2 : 1) * k;
     controls.update();
   } else if (LOCKED[cam.mode]) {
-    camera.position.copy(goalPos); controls.target.copy(goalTarget); camera.lookAt(goalTarget);
+    camera.position.copy(goalPos); controls.target.copy(goalTarget); camera.up.copy(goalUp()); camera.lookAt(goalTarget);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   } else { controls.rotateSpeed = 1; controls.zoomSpeed = TS.on ? 2 : 1; controls.update(); }
 }
@@ -2242,14 +2281,14 @@ function updateLabels() {
 // ---------------- Picking: double-click focuses a body, hovering shows its ID card ----------------
 // NASA planetary fact sheets; moon counts as of 2025. NAIF ID = the body's JPL/SPICE identifier.
 const BODY_FACTS = {
-  sun:     { naif: 10,  color: '#ffc861', type: 'Star (G2V)',        diam: 1392700, mass: 332946, g: 274,  day: '25.4 d (equator)', year: '—',        moons: '—',  temp: '5,500 °C (surface)' },
+  sun:     { naif: 10,  color: '#ffc861', type: 'Star (G2V)',        diam: 1391400, mass: 332946, g: 274,  day: '25.4 d (equator)', year: '—',        moons: '—',  temp: '5,500 °C (surface)' },
   mercury: { naif: 199, color: '#a8a29a', type: 'Rocky planet',      diam: 4879,    mass: 0.0553, g: 3.7,  day: '58.6 d',  year: '88.0 d',        moons: '0',   temp: '167 °C' },
   venus:   { naif: 299, color: '#e8cf9a', type: 'Rocky planet',      diam: 12104,   mass: 0.815,  g: 8.9,  day: '243 d (retrograde)', year: '224.7 d', moons: '0', temp: '464 °C' },
   earth:   { naif: 399, color: '#3a8dde', type: 'Rocky planet',      diam: 12756,   mass: 1,      g: 9.8,  day: '23.93 h', year: '365.26 d',      moons: '1',   temp: '15 °C' },
   moon:    { naif: 301, color: '#c8c8c8', type: 'Moon of Earth',     diam: 3475,    mass: 0.0123, g: 1.6,  day: '27.3 d (tidally locked)', year: '27.3 d around Earth', moons: '—', temp: '−20 °C' },
   mars:    { naif: 499, color: '#d0643a', type: 'Rocky planet',      diam: 6792,    mass: 0.107,  g: 3.7,  day: '24.6 h',  year: '687 d',         moons: '2',   temp: '−65 °C' },
-  jupiter: { naif: 599, color: '#d8b48c', type: 'Gas giant',         diam: 142984,  mass: 317.8,  g: 23.1, day: '9.9 h',   year: '11.86 yr',      moons: '95',  temp: '−110 °C' },
-  saturn:  { naif: 699, color: '#e3cf9b', type: 'Gas giant',         diam: 120536,  mass: 95.2,   g: 9.0,  day: '10.7 h',  year: '29.4 yr',       moons: '274', temp: '−140 °C' },
+  jupiter: { naif: 599, color: '#d8b48c', type: 'Gas giant',         diam: 142984,  mass: 317.8,  g: 23.1, day: '9.9 h',   year: '11.86 yr',      moons: '115', temp: '−110 °C' },
+  saturn:  { naif: 699, color: '#e3cf9b', type: 'Gas giant',         diam: 120536,  mass: 95.2,   g: 9.0,  day: '10.7 h',  year: '29.4 yr',       moons: '293', temp: '−140 °C' },
   uranus:  { naif: 799, color: '#9fdbe0', type: 'Ice giant',         diam: 51118,   mass: 14.5,   g: 8.7,  day: '17.2 h (retrograde)', year: '84.0 yr', moons: '29', temp: '−195 °C' },
   neptune: { naif: 899, color: '#5b7fe0', type: 'Ice giant',         diam: 49528,   mass: 17.1,   g: 11.0, day: '16.1 h',  year: '164.8 yr',      moons: '16',  temp: '−200 °C' },
 };
@@ -2529,28 +2568,37 @@ function phaseGeom(n) {
   return { n, m, o, xs, zs, si, al, img: new ImageData(n, n) }; // reused: disc pixels are rewritten every draw, the rest stays clear
 }
 // Renders the Moon as seen from Earth: true terminator, Lommel–Seeliger reflectance (why the full Moon looks flat), earthshine.
-function drawPhase(elong, waxing, south) {
+// roll: the turn from the base drawing (ecliptic north up) to the observer's zenith up; only a re-blit when just the roll changes.
+const phaseOff = document.createElement('canvas'); let phaseRollKey = null;
+function drawPhase(elong, sun, roll) {
   const cv = $('phase'), n = min(900, round(hudBox.phase * dprOf())); // follows the enlarged view; 900 caps a redraw at ~6 ms
-  const key = `${round(elong * R2D * (n > 400 ? 4 : 1))}|${waxing}|${south}|${n}`; // ¼° steps when enlarged
-  if (!albSrc || !hudBox.phase || key === phaseKey) return;
-  if (!moonAlbedo) readMoonAlbedo();
-  phaseKey = key;
+  const key = `${round(elong * R2D * (n > 400 ? 4 : 1))}|${round(atan2(sun.y, sun.x) * R2D * 2)}|${n}`, rk = round(roll * R2D * 2); // ¼° steps when enlarged; roll in ½° steps
+  if (!albSrc || !hudBox.phase || key === phaseKey && rk === phaseRollKey) return;
+  phaseRollKey = rk;
+  if (key !== phaseKey) { phaseKey = key; renderPhase(elong, sun, n); }
   if (cv.width !== n) cv.width = cv.height = n;
   const g = cv.getContext('2d');
-  const ang = waxing ? elong : -elong, sx = sin(ang), sz = -cos(ang); // northern view: waxing lit on the right
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n);
+  g.translate(n / 2, n / 2); g.rotate(-roll); g.drawImage(phaseOff, -n / 2, -n / 2); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.strokeStyle = 'rgba(255,255,255,.1)'; g.lineWidth = 1; g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 0.5, 0, TAU); g.stroke();
+}
+function renderPhase(elong, sun, n) {
+  if (!moonAlbedo) readMoonAlbedo();
+  if (phaseOff.width !== n) phaseOff.width = phaseOff.height = n;
+  const g = phaseOff.getContext('2d');
+  const { x: sx, y: sy, z: sz } = sun;
   const shine = 0.035 * (1 + cos(elong)) / 2;
   const surge = 1 + 0.4 * exp(-18 * (PI - elong)); // opposition surge near full Moon (phase angle ≈ 180° − elongation)
   if (phaseGeo?.n !== n) phaseGeo = phaseGeom(n);
   const { m, o, xs, zs, si, al, img } = phaseGeo, d = img.data;
   for (let i = 0; i < m; i++) {
-    const z = zs[i], mu0 = xs[i] * sx + z * sz, s = si[i];
+    const z = zs[i], mu0 = xs[i] * sx + (1 - ((o[i] / n | 0) + 0.5) / n * 2) * sy + z * sz, s = si[i]; // y from the pixel row
     const L = (mu0 > 0 ? 2 * mu0 / (mu0 + z) * smooth(0, 0.035, mu0) * surge : 0) + shine;
-    const f = sqrt(L), k = (south ? n * n - 1 - o[i] : o[i]) * 4; // southern observers see it rotated 180°
+    const f = sqrt(L), k = o[i] * 4;
     d[k] = moonAlbedo[s] * f; d[k + 1] = moonAlbedo[s + 1] * f; d[k + 2] = moonAlbedo[s + 2] * f;
     d[k + 3] = al[i];
   }
   g.putImageData(img, 0, 0);
-  g.strokeStyle = 'rgba(255,255,255,.1)'; g.lineWidth = 1; g.beginPath(); g.arc(n / 2, n / 2, n / 2 - 0.5, 0, TAU); g.stroke();
 }
 const PHASES = [[11, 'newMoon'], [79, 'waxCres'], [101, 'firstQ'], [169, 'waxGib'], [191, 'fullMoon'], [259, 'wanGib'], [281, 'lastQ'], [349, 'wanCres'], [361, 'newMoon']]; // i18n keys
 function eclipseStatus(a, elong) {
@@ -2696,10 +2744,26 @@ const PHASE = { newMoon: 0, firstQ: 90, fullMoon: 180, lastQ: 270 };
 // Each finder returns the first event after jd as [jd, label]; SPAN (days) of look-back always holds the previous one.
 const FIND = {
   season: jd => { const q = (floor(mod(sunLon(jd), 360) / 90) + 1) % 4; return [nextAngle(sunLon, q * 90, 0.9856, jd), TXT.seasons[q]]; },
-  solar: jd => { const e = Astronomy.SearchGlobalSolarEclipse(aeTime(jd)); return [e.peak.ut + J2000, TXT.solar[e.kind] || e.kind]; },
-  lunar: jd => { const e = Astronomy.SearchLunarEclipse(aeTime(jd)); return [e.peak.ut + J2000, TXT.lunar[e.kind] || e.kind]; },
+  solar: jd => { const e = Astronomy.SearchGlobalSolarEclipse(aeTime(jd)); return [refineMin(appSep, e.peak.ut + J2000), TXT.solar[e.kind] || e.kind]; },
+  lunar: jd => { const e = Astronomy.SearchLunarEclipse(aeTime(jd)); return [refineMin(jd => -appSep(jd), e.peak.ut + J2000), TXT.lunar[e.kind] || e.kind]; },
 };
-for (const k in PHASE) FIND[k] = jd => [nextAngle(moonElong, PHASE[k], 12.19, jd), TXT.ev[k]];
+// The displayed Moon carries astro()'s secular time shift (46 min by 585 BCE): event times are refined against it, so a jump lands on
+// the syzygy the app shows. Library first (finds the right event), then the app's own Moon (exact time).
+const appElong = jd => { const a = astro(jd); return mod((a.lamMoon - a.lamSun) * R2D, 360); };
+const appSep = jd => { const a = astro(jd); return acos(clamp(cos(a.betaMoon) * cos(a.lamMoon - a.lamSun), -1, 1)); };
+function refineMin(f, jd, h = 3 / 24) { // golden-section minimum of f within ±h days
+  let lo = jd - h, hi = jd + h;
+  for (let i = 0; i < 30; i++) { const c = hi - 0.618034 * (hi - lo), d = lo + 0.618034 * (hi - lo); if (f(c) < f(d)) hi = d; else lo = c; }
+  return (lo + hi) / 2;
+}
+const nearAngle = (f, target, rate, jd) => { for (let k = 0; k < 5; k++) jd += (mod(target - f(jd) + 180, 360) - 180) / rate; return jd; }; // the crossing nearest jd
+for (const k in PHASE) FIND[k] = jd => [nearAngle(appElong, PHASE[k], 12.19, nextAngle(moonElong, PHASE[k], 12.19, jd)), TXT.ev[k]];
+// Lunar age: time since the last new Moon of the displayed Moon. Its speed varies ±13%, so Δλ / mean rate is up to a day off.
+const age = { jd: NaN, v: 0 };
+function moonAge(jd, e360) {
+  if (jd === age.jd) return age.v;
+  age.jd = jd; return age.v = jd - nearAngle(appElong, 0, 12.19, jd - e360 / 12.19);
+}
 const SPAN = { season: 100, solar: 200, lunar: 200 }, MIN1 = 1 / 1440;
 function eventAfter(key, jd) {
   let n = FIND[key](jd);
@@ -2883,7 +2947,7 @@ function applyEditor() {
 function hashStr() {
   const c = jdToCal(state.jd), s = state.simSpeed;
   return `#d=${c.y}-${pad2(c.m)}-${pad2(c.d)}T${fmtTime(c.f)}Z&lat=${+state.latitude.toFixed(2)}&cam=${cam.mode === 'follow' ? 'follow:' + cam.follow : cam.mode}` +
-    `&s=${abs(s - REALTIME) / REALTIME < 0.02 ? 'real' : +s.toPrecision(3)}${QFORCE ? '&q=' + QFORCE : ''}${state.reverse ? '&rev=1' : ''}${$('hebChk').checked ? '' : '&hd=0'}${state.isPlaying ? '' : '&paused=1'}`;
+    `&s=${abs(s - REALTIME) / REALTIME < 0.02 ? 'real' : +s.toPrecision(3)}${state.reverse ? '&rev=1' : ''}${$('hebChk').checked ? '' : '&hd=0'}${state.isPlaying ? '' : '&paused=1'}`;
 }
 function hashJd(s) { // NaN unless the text is a date within the calendar's range (a huge year overflows to Infinity)
   const d = /^(-?\d+)-(\d+)-(\d+)T(\d+):(\d+):?([\d.]*)Z?$/.exec(s || '');
@@ -3005,6 +3069,16 @@ function setLatitude(lat, fromPlace) {
   if (!fromPlace) { const i = PLACES.findIndex(p => p[1] === state.latitude); $('place').selectedIndex = max(i, 0); }
   rebuildLatRing();
 }
+// Build the planets at a quiet moment after loading and draw them once off screen, so their shaders and textures are already
+// on the GPU and the first "Other planets" click only fades them in.
+function warmPlanets() {
+  if (planetsBuilt) return;
+  buildPlanets();
+  if (!composer || state.showPlanets) return;
+  const culled = []; planetGroup.traverse(o => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+  planetGroup.visible = true; renderer.setRenderTarget(composer.readBuffer); renderer.render(scene, camera); // the next frame overwrites it
+  renderer.setRenderTarget(null); planetGroup.visible = false; culled.forEach(o => { o.frustumCulled = true; });
+}
 // Show the overlay for a moment of heavy texture generation (lets it paint first).
 function busy(msg, fn) {
   const ov = $('loading'); ov.querySelector('.ldtext').textContent = msg; ov.style.display = ''; ov.style.opacity = 0.85;
@@ -3054,8 +3128,8 @@ function bindUI() {
   if (matchMedia('(max-width:760px)').matches) document.querySelectorAll('.collapse').forEach(b => b.click());
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    renderer.setPixelRatio(rdpr()); renderer.setSize(innerWidth, innerHeight); chartKey = ''; phaseKey = '';
-    sky.stars.material.uniforms.uDpr.value = rdpr(); beltU.uPx.value = EXTRA_DISPLAY.beltPx * rdpr();
+    renderer.setPixelRatio(dprOf()); renderer.setSize(innerWidth, innerHeight); chartKey = ''; phaseKey = '';
+    sky.stars.material.uniforms.uDpr.value = dprOf(); beltU.uPx.value = EXTRA_DISPLAY.beltPx * dprOf();
   });
 }
 
@@ -3089,7 +3163,7 @@ function updateAstronomyAndUI(time) {
   // Spec state fields.
   const year = jdToCal(state.jd).y, jan1 = calToJd(year, 1, 1), daysInYear = calToJd(year + 1, 1, 1) - jan1;
   state.dayOfYear = floor(state.jd - jan1) + 1;
-  state.lunarDay = mod(a.lamMoon - a.lamSun, TAU) / TAU * SYNODIC;
+  state.lunarDay = moonAge(state.jd, mod(a.lamMoon - a.lamSun, TAU) * R2D);
 
   updateTimeUI();
 
@@ -3110,13 +3184,13 @@ function updateAstronomyAndUI(time) {
   drawChart(year, jan1, daysInYear, state.dayOfYear);
 
   // Moon phase HUD.
-  const e360 = mod(a.lamMoon - a.lamSun, TAU) * R2D, waxing = e360 < 180;
-  setText('illum', t('lit', { v: nf((1 - cos(elong)) / 2 * 100, 1) }));
+  const e360 = mod(a.lamMoon - a.lamSun, TAU) * R2D, roll = phaseView();
+  setText('illum', t('lit', { v: nf((1 + phaseSun.z) / 2 * 100, 1) }));
   setText('phaseName', t(PHASES.find(p => e360 < p[0])[1]));
   setText('age', t('days', { v: nf(state.lunarDay, 1) }));
   setText('mdist', t('km', { v: NUM_FMT.format(round(a.distMoon)) }));
   setText('eclipse', eclipseStatus(a, elong));
-  drawPhase(elong, waxing, lat < 0);
+  drawPhase(elong, phaseSun, roll);
   return a;
 }
 
@@ -3153,22 +3227,7 @@ function animate() {
   updateCamera(dt);
   updateLabels();
   updateLighting(dt, a);
-  const drew = needsDraw(now);
-  if (drew) { composer ? composer.render(dt) : renderer.render(scene, camera); markDrawn(now); }
-  if (QFORCE !== 'high') autoQuality(drew && drewPrev, raw, now);
-  drewPrev = drew;
-}
-// Run-time step-down: when the median of 45 back-to-back drawn frames is over 40 ms, cut the render resolution (×0.8, to ×0.5),
-// then switch bloom off. Starts when the loader hides; no step back up (it would oscillate).
-let drewPrev = false, settleUntil = Infinity; const frameBuf = [];
-function autoQuality(active, raw, now) {
-  if (!active || raw > 0.5 || now < settleUntil) return;
-  frameBuf.push(raw); if (frameBuf.length < 45) return;
-  const med = frameBuf.sort((a, b) => a - b)[22]; frameBuf.length = 0;
-  if (med < 0.04) return; // above 33 ms: Chrome's Energy Saver caps a healthy page at 30 fps
-  settleUntil = now + 2000;
-  if (resScale > 0.5) { resScale = max(0.5, resScale * 0.8); dispatchEvent(new Event('resize')); }
-  else if (composer && composer.bloom.enabled) composer.bloom.enabled = false;
+  if (needsDraw(now)) { composer ? composer.render(dt) : renderer.render(scene, camera); markDrawn(now); }
 }
 
 // ---------------- Start ----------------
@@ -3216,11 +3275,12 @@ Promise.race([all, timeout]).then(r => {
     calm = now - prev < 40 ? calm + 1 : 0; prev = now;
     if ((calm < 20 || now - t0 < 1000) && now - t0 < 6000) return requestAnimationFrame(wait);
     const ov = $('loading'); ov.style.opacity = 0; setTimeout(() => { ov.style.display = 'none'; }, 700);
-    settleUntil = performance.now() + 2500; document.body.classList.add('enter'); setTimeout(() => document.body.classList.remove('enter'), 900);
+    document.body.classList.add('enter'); setTimeout(() => document.body.classList.remove('enter'), 900);
     if (photoOk) upgradePhotos();
+    whenIdle(warmPlanets);
   })(t0);
 });
-window.sim = { state, astro, setCamMode, camera, controls, cam, moonMat, earthMat, sky, skyQ, earthTilt, quality: () => ({ LOW, QFORCE, resScale, pr: renderer.getPixelRatio(), bloom: !!composer && composer.bloom.enabled, programs: renderer.info.programs.length }) }; // console access for inspection
+window.sim = { state, astro, setCamMode, camera, controls, cam, moonMat, earthMat, sky, skyQ, earthTilt, get roll() { return rollNow; } }; // console access for inspection
 });
 </script>
 </body>
