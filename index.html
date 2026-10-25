@@ -448,7 +448,7 @@ function applyLang() {
   LOCALE = LOCALES[LANG]; NUM_FMT = new Intl.NumberFormat(LOCALE);
   // Card contents mirror; the cards stay put. Set on the contents, not the card: an RTL scroll box moves its scrollbar
   // to the left and shifts everything. The left header (title, language toggle) stays fixed; the Observatory's mirrors.
-  document.querySelectorAll('.panel .pbody, #right .phead').forEach(p => p.dir = LANG === 'he' ? 'rtl' : 'ltr');
+  document.querySelectorAll('.panel .pbody, #right .phead, #card').forEach(p => p.dir = LANG === 'he' ? 'rtl' : 'ltr');
   document.documentElement.lang = LANG;
   document.title = t('title');
   EN_TABLES.TXT ||= { ...TXT }; Object.assign(TXT, LANG === 'he' ? HE_TABLES.TXT : EN_TABLES.TXT);
@@ -590,7 +590,7 @@ const PLANETS = [
   { key: 'neptune', name: 'Neptune', a: 30.06992276, r: 2.1, color: 0x5b7fe0 },
 ];
 // Distances are compressed (a^0.55) so all orbits fit one view; each orbit keeps its true shape and tilt.
-const displayScale = a => TS.on ? AU : AU * pow(a, 0.55) / a;
+const displayScale = a => AU * pow(a, -0.45 * (1 - TS.k)); // TS.k = true-scale blend: 0 compressed (AU·a^0.55/a), 1 flat (AU)
 function planetPos(p, a, out) {
   const v = Astronomy.HelioVector(p.name, a.time), s = displayScale(p.a);
   return eqjToScene(a.rot.rot, v.x * s, v.y * s, v.z * s, out);
@@ -1566,7 +1566,7 @@ const earthOrbit = new THREE.LineLoop(new THREE.BufferGeometry(), lineMat(0x6fa8
 let earthOrbitJd = -Infinity;
 function buildEarthOrbit(jd) {
   const pts = [];
-  for (let k = 0; k < 366; k++) { const a = sunOnly(jd + k * 365.2422 / 366); pts.push(ecl(a.lamSun + PI, 0, a.rSun * AU)); }
+  for (let k = 0; k < 366; k++) { const a = sunOnly(jd + k * 365.2422 / 366); pts.push(ecl(a.lamSun + PI, 0, a.rSun * AU0)); } // built at AU0 once; tsApply() scales the line, so a toggle never rebuilds it
   earthOrbit.geometry.setFromPoints(pts); earthOrbit.geometry.computeBoundingSphere(); earthOrbitJd = jd;
 }
 orbitGroup.add(earthOrbit);
@@ -1781,7 +1781,7 @@ const GAL_MOONS = ['io', 'europa', 'ganymede', 'callisto'];
 const PLUTO_EL = { a: 39.48211675, e: 0.2488273, i: 17.14001206, om: 110.30393684, w: 113.76497945, M0: 14.86012204, n: 0.9856076686 / 39.48211675 ** 1.5, d0: 0 };
 const plutoEqj = (d, out) => abs(d) < 7.3e5 ? out.copy(Astronomy.HelioVector('Pluto', d)) : eqjFromElements(PLUTO_EL, d, out);
 let extrasBuilt = false, extraMoons = [], pJup = null, pSat = null, pPluto = null, ceres = null, beltPts = null, jupShadowC = null, jupShadowR = [];
-const moonDisp = (parent, km) => TS.on ? km / KMU : bodies[parent].r * EXTRA_DISPLAY.moonK * sqrt(km / EXTRA_DISPLAY.parentKm[parent]);
+const moonDisp = (parent, km) => pow(bodies[parent].r0 * EXTRA_DISPLAY.moonK * sqrt(km / EXTRA_DISPLAY.parentKm[parent]), 1 - TS.k) * pow(km / KMU, TS.k); // geometric blend of the two layouts
 
 // Osculating Kepler elements (J2000 ecliptic, degrees, d0 = epoch in days from J2000) → EQJ vector in AU.
 function eqjFromElements(el, d, out) {
@@ -1892,7 +1892,7 @@ function buildBelt() {
         vec3 p = vec3(cos(om) * x1 - sin(om) * cos(inc) * y1, sin(om) * x1 + cos(om) * cos(inc) * y1, sin(inc) * y1);
         vec3 q = vec3(p.x, 0.9174820621 * p.y - 0.3977771559 * p.z, 0.3977771559 * p.y + 0.9174820621 * p.z); // ecliptic → EQJ
         vR = length(vec2(xv, yv));
-        vec4 mv = modelViewMatrix * vec4(vec3(q.x, q.z, -q.y) * uAU * mix(pow(a, 0.55) / a, 1.0, uFlat), 1.0); // stored layout; uFlat = 1 in true scale (displayScale(a) = AU)
+        vec4 mv = modelViewMatrix * vec4(vec3(q.x, q.z, -q.y) * uAU * pow(a, -0.45 * (1.0 - uFlat)), 1.0); // stored layout; uFlat = TS.k (displayScale(a) = AU * a^(-0.45 (1 - k)))
         gl_Position = projectionMatrix * mv; gl_PointSize = uPx;
       }`,
     fragmentShader: `uniform float uK; varying float vR;
@@ -1925,7 +1925,7 @@ function updateExtras(a) {
   eqjToScene(rot, xE.x * s, xE.y * s, xE.z * s, ceres.group.position); ceres.spin.rotation.y = mod(a.d * TAU / (9.07417 / 24), TAU);
   const rE = earthGroup.position.length() / AU, gain = litU.uIrr.value * rE * rE; // same exposure the planets use
   for (const c of [pPluto, ceres]) EXTRA_P[c.key].irr.value = gain / planetR(EXTRA_P[c.key]) ** 2;
-  beltPts.quaternion.copy(planetOrbits.quaternion); beltU.uFlat.value = TS.on ? 1 : 0; beltU.uD.value = a.d; beltU.uAU.value = AU; beltU.uK.value = gain;
+  beltPts.quaternion.copy(planetOrbits.quaternion); beltU.uFlat.value = TS.k; beltU.uD.value = a.d; beltU.uAU.value = AU; beltU.uK.value = gain;
 }
 // ---------------- Earth tiles (NASA GIBS) ----------------
 // Close up, NASA GIBS map tiles (WMTS, EPSG:4326: equirectangular like the global maps, registered to them within half a
@@ -2219,7 +2219,7 @@ function setCamMode(mode, follow) {
     else cam.offset.set(0.3, 0.42, 1);
     cam.offset.normalize().multiplyScalar(b.dist);
     controls.minDistance = b.r * (cam.follow === 'earth' ? 1.05 : 1.4); // Earth: close enough for the finest NASA tiles (250 m daily, level 8)
-  } else { controls.minDistance = bodies.sun.r * 1.3; controls.rotateSpeed = 1; controls.zoomSpeed = TS.on ? 2 : 1; } // the follow-view slowdown must not outlast the transition
+  } else { controls.minDistance = bodies.sun.r * 1.3; controls.rotateSpeed = 1; controls.zoomSpeed = 1 + TS.k; } // the follow-view slowdown must not outlast the transition
   cam.fromPos.copy(camera.position); cam.fromTarget.copy(controls.target); cam.fromFov = camera.fov; cam.fromUp.copy(camera.up); cam.t = 0; cam.lens = 1;
   controls.enabled = !LOCKED[mode];
   $('cam').value = mode === 'follow' ? 'follow:' + cam.follow : mode;
@@ -2236,6 +2236,7 @@ function updateCamera(dt) {
     camera.up.copy(cam.fromUp).applyQuaternion(q0.identity().slerp(qUp.setFromUnitVectors(cam.fromUp, goalUp()), k)); // setFromUnitVectors copes with opposite ups
     if (cam.t === 1 && !LOCKED[cam.mode]) camera.up.copy(UP); // OrbitControls assume the default up
     camera.lookAt(controls.target);
+    if (TS.tw && cam.mode === 'follow') { tA.subVectors(goalTarget, lastBody); cam.fromPos.add(tA); cam.fromTarget.add(tA); } // the body is moving with the scale
     lastBody.copy(goalTarget);
     return;
   }
@@ -2246,12 +2247,12 @@ function updateCamera(dt) {
     camera.position.add(tA); controls.target.add(tA);
     // Slow rotate/zoom near the surface: speed ∝ height above it, so close-ups stay controllable.
     const b = bodies[cam.follow], d = camera.position.distanceTo(b.obj.position), k = clamp((d - b.r) / d, 0.03, 1);
-    controls.rotateSpeed = k; controls.zoomSpeed = (TS.on ? 2 : 1) * k;
+    controls.rotateSpeed = k; controls.zoomSpeed = (1 + TS.k) * k;
     controls.update();
   } else if (LOCKED[cam.mode]) {
     camera.position.copy(goalPos); controls.target.copy(goalTarget); camera.up.copy(goalUp()); camera.lookAt(goalTarget);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
-  } else { controls.rotateSpeed = 1; controls.zoomSpeed = TS.on ? 2 : 1; controls.update(); }
+  } else { controls.rotateSpeed = 1; controls.zoomSpeed = 1 + TS.k; controls.update(); }
 }
 const lp = new V3(), lt = new V3(), camUp = new V3(), placed = [];
 function updateLabels() {
@@ -2380,18 +2381,19 @@ function hideCard() { cardKey = null; card.hidden = true; clearInterval(cardTime
 // shifted so the camera sits at the origin (float32 jitter would be ~16 km at 1 AU), and near/far follow the nearest
 // surface and the farthest orbit, so no shader needs logarithmic depth.
 const KMU = EARTH_KM / EARTH_R, AU0 = AU, MO0 = MOON_ORBIT, TS_AU = KM_PER_AU / KMU, TS_FAR = 30.07; // km per unit; Neptune's a
-const TS = { on: false, org: new V3(), zoom: null };
+const TS = { on: false, k: 0, tw: null, org: new V3() }; // on = the checkbox; k = the eased blend 0..1 that drives every scale; tw = the running tween
 // Free/top camera distances: the illustrative views scaled so the same orbits fill the frame.
-const tsViewK = () => TS.on ? AU / AU0 * (state.showPlanets ? pow(TS_FAR, 0.45) : 1) : 1;
+const tsViewK = () => AU / AU0 * (state.showPlanets ? pow(TS_FAR, 0.45 * TS.k) : 1);
 // Radii, follow distances, orbit lines and ring-shadow uniforms of the Sun and planets (idempotent; planets are built lazily).
 function tsApply() {
   for (const k of ['sun', ...PLANETS.map(p => p.key), ...EXTRA_BODIES.map(c => c.key)]) {
     const b = bodies[k];
     if (!b) continue;
     b.r0 ??= b.r; b.dist0 ??= b.dist;
-    const f = TS.on ? BODY_FACTS[k].diam / 2 / KMU / b.r0 : 1;
+    const f = pow(BODY_FACTS[k].diam / 2 / KMU / b.r0, TS.k);
     b.obj.scale.setScalar(f); b.r = b.r0 * f; b.dist = b.dist0 * f;
   }
+  earthOrbit.scale.setScalar(AU / AU0);
   for (const o of [...PLANETS, pPluto, ceres]) if (o && o.orbit) o.orbit.scale.setScalar(displayScale(o.a) / o.orbitS);
   for (const p of PLANETS) {
     const R = bodies[p.key] ? bodies[p.key].r : p.r;
@@ -2401,41 +2403,44 @@ function tsApply() {
   GAL_MOONS.forEach((k, i) => { if (bodies[k]) jupShadowR[i] = bodies[k].r; });
   sunMat.uniforms.uScale.value = sunGroup.scale.x;
 }
+// One eased blend k drives AU, MOON_ORBIT, radii and the orbit compression together, geometrically (the scales differ by
+// 100×+), so the same scene, lines included, visibly grows/shrinks; the camera is rescaled with it each frame, never re-aimed.
 function setTrueScale(on) {
   if (on === TS.on) return;
-  const f = cam.mode === 'follow' && bodies[cam.follow], from = f && f.obj.position.clone(), r0 = f && f.r;
-  TS.on = on; AU = on ? TS_AU : AU0; MOON_ORBIT = on ? MOON_MEAN_KM / KMU : MO0; earthOrbitJd = -Infinity;
-  tsApply(); updateAstronomyAndUI(performance.now() / 1000);
-  const maxD = 3000 * (on ? TS_AU / AU0 * pow(TS_FAR, 0.45) : 1);
-  controls.maxDistance = maxD; controls.zoomSpeed = on ? 2 : 1;
-  if (!on) {
-    camera.near = 0.05; camera.far = 20000; camera.updateProjectionMatrix();
-    sky.stars.scale.setScalar(1); milkyWay.scale.setScalar(1); sky.stars.material.transparent = true; eclU.uSunW.value.set(0, 0, 0);
-  }
-  if (f) { // keep the followed body centred: carry the view along, then zoom the offset to the body's new size
-    tA.subVectors(f.obj.position, from);
-    (cam.t < 1 ? [cam.fromPos, cam.fromTarget] : [camera.position, controls.target, lastBody]).forEach(v => v.add(tA));
-    cam.offset.multiplyScalar(f.r / r0);
-    const a = camera.position.distanceTo(controls.target), minD = f.r * (cam.follow === 'earth' ? 1.05 : 1.4), b = clamp(a * f.r / r0, minD, maxD);
-    controls.minDistance = min(minD, a); controls.maxDistance = max(maxD, a);
-    TS.zoom = cam.t < 1 || a === b ? null : { a, b, minD, maxD, t0: performance.now() };
-    if (!TS.zoom) { controls.minDistance = minD; controls.maxDistance = maxD; }
-  } else if (!LOCKED[cam.mode]) setCamMode(cam.mode);
-  $('trueScale').checked = on;
+  TS.on = on; $('trueScale').checked = on;
+  TS.tw = { a: TS.k, b: +on, t0: performance.now(), d: reduceMotion.matches ? 0 : 1400 * abs(+on - TS.k) }; // a reversal starts from where it is
+  tsStep(performance.now());
 }
 $('trueScale').onchange = e => setTrueScale(e.target.checked);
+function tsStep(now) { // once per frame, before the positions are computed
+  const z = TS.tw;
+  if (!z) return;
+  const p = z.d ? clamp((now - z.t0) / z.d, 0, 1) : 1, k0 = TS.k, aOld = AU, fb = cam.mode === 'follow' && bodies[cam.follow], r0 = fb && fb.r;
+  TS.k = z.a + (z.b - z.a) * smooth(0, 1, p);
+  AU = AU0 * pow(TS_AU / AU0, TS.k); MOON_ORBIT = MO0 * pow(MOON_MEAN_KM / KMU / MO0, TS.k);
+  tsApply();
+  const vk = AU / aOld * (state.showPlanets ? pow(TS_FAR, 0.45 * (TS.k - k0)) : 1);
+  if (fb) { // the followed body keeps its on-screen size: its view offset grows with its radius
+    cam.offset.multiplyScalar(fb.r / r0);
+    camera.position.sub(controls.target).multiplyScalar(fb.r / r0).add(controls.target);
+    controls.minDistance = fb.r * (cam.follow === 'earth' ? 1.05 : 1.4);
+  } else if (!LOCKED[cam.mode]) { // free/top: the whole view scales about the Sun, like the orbits
+    for (const v of [camera.position, controls.target, cam.fromPos, cam.fromTarget]) v.multiplyScalar(vk);
+    controls.minDistance = bodies.sun.r * 1.3;
+  }
+  controls.maxDistance = 3000 * AU / AU0 * pow(TS_FAR, 0.45 * TS.k);
+  if (p === 1) {
+    TS.tw = null;
+    if (!TS.k) { // back to the plain scene: undo the camera-relative render's side effects
+      camera.near = 0.05; camera.far = 20000; camera.updateProjectionMatrix();
+      sky.stars.scale.setScalar(1); milkyWay.scale.setScalar(1); sky.stars.material.transparent = true; eclU.uSunW.value.set(0, 0, 0);
+    }
+  }
+}
 // Camera-relative rendering of the main scene (bloom and the other passes render their own scenes and pass through).
 const tsRender = renderer.render.bind(renderer), tsU = () => [eclU.uEarthPos.value, eclU.uMoonPos.value, ringMat.uniforms.uCenter.value];
 renderer.render = (s, c) => {
-  if (TS.zoom) { // geometric ease of the follow distance after a toggle (body-relative, so it works while time runs)
-    const z = TS.zoom, k = smooth(0, 1, (performance.now() - z.t0) / 1200);
-    if (cam.mode !== 'follow') TS.zoom = null;
-    else {
-      camera.position.sub(controls.target).setLength(z.a * pow(z.b / z.a, k)).add(controls.target);
-      if (k >= 1) { controls.minDistance = z.minD; controls.maxDistance = z.maxD; TS.zoom = null; }
-    }
-  }
-  if (s !== scene || c !== camera || !TS.on) return tsRender(s, c);
+  if (s !== scene || c !== camera || !TS.k) return tsRender(s, c);
   tsApply();
   let sMin = Infinity;
   for (const k in bodies) {
@@ -3206,7 +3211,7 @@ const tilesBusy = () => { // GIBS tiles still loading or fading in (their fade r
   return false;
 };
 function needsDraw(now) {
-  if ((state.isPlaying && state.simSpeed !== REALTIME) || now < wakeUntil || now - drawn.t >= 100 || cam.t < 1 || dateFx.tw || TS.zoom || tilesBusy()) return true;
+  if ((state.isPlaying && state.simSpeed !== REALTIME) || now < wakeUntil || now - drawn.t >= 100 || cam.t < 1 || dateFx.tw || TS.tw || tilesBusy()) return true;
   if (abs(state.jd - drawn.jd) > 1e-5 || abs(expoLog - drawn.expo) > 1e-4 || abs(sunK - drawn.sunK) > 1e-3 || abs(camera.fov - drawn.fov) > 1e-6) return true;
   pose.subVectors(camera.position, controls.target); // relative to the pivot: a followed body drifting along does not count
   const e = camera.matrixWorld.elements;
@@ -3223,6 +3228,7 @@ function animate() {
   // Real time follows the wall clock even after a hidden tab; faster speeds stay capped so nothing jumps.
   if (!tickJd(now) && state.isPlaying && !scrubbing) state.jd += (state.reverse ? -1 : 1) * (state.simSpeed === REALTIME ? raw : dt) * DAYS_PER_SEC * state.simSpeed;
   state.jd = clampJd(state.jd);
+  tsStep(now);
   const a = updateAstronomyAndUI(now / 1000);
   updateCamera(dt);
   updateLabels();
